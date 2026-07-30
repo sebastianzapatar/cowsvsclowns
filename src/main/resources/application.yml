@@ -1,0 +1,5 @@
+spring:
+  application:
+    name: cowsvsclown
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}

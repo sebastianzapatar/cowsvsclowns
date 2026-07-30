@@ -1,0 +1,27 @@
+# =============================================================================
+# PERFIL "dev"  ->  se activa con: spring.profiles.active=dev
+# =============================================================================
+# Para trabajar en tu máquina, con un Postgres local (sin Docker).
+# Es el perfil por defecto: si no decís nada, este es el que se usa.
+# =============================================================================
+
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/chefs_db
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      # "update" ajusta las tablas al arrancar: cómodo mientras se desarrolla.
+      # Nunca en producción (ver application-prod.yml).
+      ddl-auto: update
+    show-sql: true
+
+logging:
+  level:
+    org.hibernate.SQL: debug
+    # Muestra los valores que van en los "?" de las consultas.
+    # Solo en dev: imprime datos reales (emails, etc.) en los logs.
+    org.hibernate.orm.jdbc.bind: trace

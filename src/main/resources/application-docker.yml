@@ -1,0 +1,24 @@
+# =============================================================================
+# PERFIL "docker"  ->  se activa con: SPRING_PROFILES_ACTIVE=docker
+# =============================================================================
+# Para correr con "docker compose up". Los valores llegan como variables de
+# entorno desde compose.yml (que a su vez las lee del .env).
+# El host de la base NO es localhost: es "db", el nombre del servicio en la red
+# de Docker.
+# =============================================================================
+
+spring:
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${DDL_AUTO:update}
+    show-sql: true
+
+logging:
+  level:
+    org.hibernate.SQL: debug

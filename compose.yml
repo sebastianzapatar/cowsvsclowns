@@ -1,0 +1,46 @@
+# La clave "version" ya no se usa en Compose V2 (genera un warning al levantar).
+#
+# Las variables ${...} las lee Compose automáticamente del archivo .env que está
+# junto a este compose.yml. Copiá .env.template a .env y completá los valores.
+
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Activa el perfil "docker" -> carga application.yml + application-docker.yml
+      - SPRING_PROFILES_ACTIVE=docker
+      # OJO: acá va SIEMPRE el puerto 5432, no ${DB_PORT}.
+      # Dentro de la red de Docker los contenedores se hablan por el puerto
+      # INTERNO de Postgres, que es 5432. ${DB_PORT} es solo el puerto del HOST
+      # (tu Mac) publicado más abajo. Si en el .env ponés DB_PORT=5433 porque
+      # ya tenés un Postgres local ocupando el 5432, con la versión anterior la
+      # app intentaba conectarse a db:5433 y fallaba con "connection refused".
+      - DB_URL=jdbc:postgresql://db:5432/${DB_NAME}
+      - DB_USERNAME=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DDL_AUTO=update
+
+  db:
+    image: postgres:15-alpine
+    ports:
+      # "puerto_de_tu_maquina:puerto_del_contenedor"
+      - "${DB_PORT}:5432"
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
