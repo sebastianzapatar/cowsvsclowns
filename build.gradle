@@ -21,6 +21,12 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+	// Expone /actuator/health, que es lo que usa el healthcheck del compose para
+	// saber si la app ya terminó de arrancar (y no solo si el proceso existe).
+	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	// Swagger / OpenAPI. La línea 3.x es la compatible con Spring Boot 4;
+	// la 2.x solo funciona con Spring Boot 3.
+	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	runtimeOnly 'org.postgresql:postgresql'
@@ -35,4 +41,18 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+// El plugin de Spring Boot genera DOS jars: el ejecutable y uno "-plain" con
+// solo las clases. Eso rompía el Dockerfile, porque "COPY build/libs/*.jar
+// app.jar" encontraba dos archivos y Docker falla cuando el origen es múltiple
+// y el destino es un solo archivo.
+tasks.named('jar') {
+	enabled = false
+}
+
+// Nombre fijo del jar ejecutable: así el Dockerfile lo copia por nombre exacto
+// y no depende de la versión del proyecto.
+tasks.named('bootJar') {
+	archiveFileName = 'app.jar'
 }

@@ -1,5 +1,53 @@
+# =============================================================================
+# CONFIGURACIÓN COMÚN A TODOS LOS PERFILES
+# =============================================================================
+# Este archivo se carga siempre. Lo que depende del entorno (base de datos,
+# nivel de logs) va en application-dev.yml o application-docker.yml, que se
+# cargan encima y pisan lo que haga falta.
+# =============================================================================
+
 spring:
   application:
     name: cowsvsclown
+
+  # Si nadie define SPRING_PROFILES_ACTIVE, se usa "dev".
+  # El compose.yml lo pone en "docker".
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
+
+  jackson:
+    # No serializar campos en null: el JSON queda más limpio y es lo que hace
+    # que "validationErrors" solo aparezca en los errores de validación.
+    default-property-inclusion: non_null
+
+# ============================= Swagger / OpenAPI =============================
+# Con springdoc no hay que escribir nada del contrato a mano: lo arma leyendo
+# los controllers y los DTO. Acá solo se configura dónde queda publicado.
+#
+#   Interfaz visual : http://localhost:8080/swagger-ui.html
+#   JSON del contrato: http://localhost:8080/v3/api-docs
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    # Ordena las operaciones por verbo HTTP y los grupos alfabéticamente,
+    # en vez del orden aleatorio en que Spring registra los métodos.
+    operations-sorter: method
+    tags-sorter: alpha
+    display-request-duration: true
+    # Deja los grupos plegados al abrir la página: con 3 recursos y ~18
+    # endpoints, desplegado no se ve nada.
+    doc-expansion: none
+
+# ================================= Actuator ==================================
+# Solo se expone /actuator/health. El resto de endpoints (env, beans, mappings)
+# muestran configuración interna y no tienen por qué estar publicados.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

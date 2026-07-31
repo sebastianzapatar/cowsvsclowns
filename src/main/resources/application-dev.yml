@@ -3,11 +3,17 @@
 # =============================================================================
 # Para trabajar en tu máquina, con un Postgres local (sin Docker).
 # Es el perfil por defecto: si no decís nada, este es el que se usa.
+#
+# Si preferís levantar solo la base con Docker y correr la app desde el IDE:
+#     docker compose up -d db
+# y dejá este perfil apuntando a localhost con el puerto de tu .env.
 # =============================================================================
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/chefs_db
+    # Los valores por defecto (después de los ":") coinciden con .env.template,
+    # así que esto arranca sin configurar nada si seguiste esa plantilla.
+    url: jdbc:postgresql://localhost:${DB_PORT:5432}/${DB_NAME:cowsvsclown_db}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
     driver-class-name: org.postgresql.Driver
@@ -15,13 +21,18 @@ spring:
   jpa:
     hibernate:
       # "update" ajusta las tablas al arrancar: cómodo mientras se desarrolla.
-      # Nunca en producción (ver application-prod.yml).
+      # Nunca en producción, ahí se usan migraciones (Flyway o Liquibase).
       ddl-auto: update
     show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
 
 logging:
   level:
     org.hibernate.SQL: debug
     # Muestra los valores que van en los "?" de las consultas.
-    # Solo en dev: imprime datos reales (emails, etc.) en los logs.
+    # Solo en dev: imprime datos reales en los logs.
     org.hibernate.orm.jdbc.bind: trace
+    # Los logs propios de la aplicación (los log.info de los servicios).
+    com.sebasmalparqueado.cowsvsclown: debug

@@ -1,4 +1,6 @@
-
+# =========================== ETAPA 1: BUILD =============================
+# Se compila adentro del contenedor para no depender de la versión de Java ni
+# de Gradle que tengas instalada en tu máquina.
 FROM eclipse-temurin:25-jdk AS builder
 
 WORKDIR /app
@@ -12,10 +14,14 @@ RUN chmod +x gradlew
 
 # 2) Después el código fuente, para que al cambiar una clase no se invaliden
 #    las capas anteriores.
+#    Este orden es lo que hace que "docker compose down && up" sea rápido: si
+#    no tocaste el código, Docker reutiliza todas las capas; si lo tocaste,
+#    solo se rehace de acá para abajo, sin volver a bajar las dependencias.
 COPY src src
 
 # --mount=type=cache guarda el caché de Gradle (~/.gradle) entre builds, así no
-# se vuelven a descargar todas las dependencias cada vez.
+# se vuelven a descargar todas las dependencias cada vez. Ese caché vive en
+# Docker y sobrevive a "docker compose down".
 # -x test omite los tests en la imagen (se corren aparte con ./gradlew test).
 RUN --mount=type=cache,target=/root/.gradle ./gradlew --no-daemon build -x test
 
@@ -31,7 +37,14 @@ WORKDIR /app
 RUN useradd --system --create-home --shell /sbin/nologin spring
 USER spring
 
-COPY --from=builder --chown=spring:spring /app/build/libs/*.jar app.jar
+# Se copia por nombre exacto y no con *.jar. El plugin de Spring Boot genera
+# dos jars (el ejecutable y uno "-plain"), y con el comodín Docker encontraría
+# dos archivos para un destino único y fallaría. En build.gradle se desactivó
+# el "-plain" y se le fijó el nombre app.jar al ejecutable.
+COPY --from=builder --chown=spring:spring /app/build/libs/app.jar app.jar
+
 EXPOSE 8080
 
+# El puerto y la base salen de las variables de entorno que pone compose.yml,
+# así que la misma imagen sirve para cualquier entorno.
 ENTRYPOINT ["java", "-jar", "app.jar"]

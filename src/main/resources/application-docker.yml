@@ -14,11 +14,20 @@ spring:
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
+    hikari:
+      # La app puede arrancar un instante antes de que Postgres acepte
+      # conexiones. Con esto reintenta durante 30 segundos en vez de morirse
+      # en el primer intento fallido.
+      initialization-fail-timeout: 30000
+
   jpa:
     hibernate:
+      # Llega desde compose.yml. "update" hace que al hacer down y up de nuevo
+      # las tablas se ajusten solas a las entidades, sin borrar los datos.
       ddl-auto: ${DDL_AUTO:update}
     show-sql: true
 
 logging:
   level:
     org.hibernate.SQL: debug
+    com.sebasmalparqueado.cowsvsclown: info

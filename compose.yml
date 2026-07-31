@@ -1,16 +1,88 @@
+# =============================================================================
+# CÓMO SE LEVANTA TODO
+# =============================================================================
+#   docker compose up -d      -> reconstruye la imagen de la app y levanta todo
+#   docker compose down       -> apaga y borra los contenedores (NO las imágenes
+#                                ni el volumen de datos)
+#   docker compose logs -f app
+#
+# El ciclo "down -> up" funciona sin tener que borrar imágenes a mano gracias a
+# dos cosas:
+#
+#   1. pull_policy: build (abajo, en el servicio app) obliga a Compose a
+#      reconstruir la imagen en cada "up". Sin esa línea, Compose ve que la
+#      imagen ya existe, la reutiliza tal cual, y seguís corriendo el código
+#      viejo: por eso antes había que borrar la imagen para ver los cambios.
+#
+#   2. El caché de capas de Docker NO se borra con "down", así que reconstruir
+#      es rápido: si no tocaste build.gradle no se vuelven a bajar las
+#      dependencias, y si no tocaste el código ni siquiera se recompila.
+#
+# Los datos viven en el volumen postgres_data, que tampoco se borra con "down".
+# Con ddl-auto=update, al levantar de nuevo Hibernate ajusta las tablas a las
+# entidades y los registros siguen ahí.
+#
+# ---------------------------------------------------------------------------
+# LO ÚNICO QUE ddl-auto=update NO SABE HACER
+# ---------------------------------------------------------------------------
+# Agregar una columna NOT NULL a una tabla QUE YA TIENE FILAS. Postgres la
+# rechaza (no sabe qué valor ponerle a las filas viejas), Hibernate lo deja
+# pasar como un WARN y la app arranca igual, con la tabla a medio actualizar.
+# En los logs se ve así:
+#
+#   GenerationTarget encountered exception accepting command :
+#   Error executing DDL "alter table if exists cows add column owner_id bigint
+#   not null" [ERROR: column "owner_id" of relation "cows" contains null values]
+#
+# Si aparece eso, tenés dos caminos:
+#   a) Empezar de cero, si los datos son de prueba:  docker compose down -v
+#   b) Conservarlos, arreglando la tabla a mano antes de levantar la app:
+#        ALTER TABLE cows ADD COLUMN owner_id bigint;        -- primero sin NOT NULL
+#        UPDATE cows SET owner_id = <un id existente>;        -- se rellena
+#        ALTER TABLE cows ALTER COLUMN owner_id SET NOT NULL; -- y ahí sí
+#
+# En un proyecto real esto se resuelve con migraciones versionadas (Flyway o
+# Liquibase) en vez de ddl-auto.
+# ---------------------------------------------------------------------------
+#
 # La clave "version" ya no se usa en Compose V2 (genera un warning al levantar).
 #
 # Las variables ${...} las lee Compose automáticamente del archivo .env que está
 # junto a este compose.yml. Copiá .env.template a .env y completá los valores.
+# =============================================================================
+
+# Nombre fijo del proyecto. Sin esto Compose usa el nombre de la carpeta, y si
+# alguna vez la renombrás te quedan contenedores y volúmenes huérfanos con el
+# nombre anterior.
+name: cowsvsclown
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Nombre fijo de la imagen, para poder inspeccionarla con docker image ls.
+    image: cowsvsclown-app:latest
+
+    # LA LÍNEA CLAVE: reconstruir siempre en el "up", exista o no la imagen.
+    pull_policy: build
+
+    container_name: cowsvsclown-app
+
+    # Si el contenedor se cae, Docker lo vuelve a levantar. "unless-stopped"
+    # respeta que vos lo hayas apagado a propósito con docker compose stop.
+    restart: unless-stopped
+
     ports:
       - "8080:8080"
+
     depends_on:
       db:
+        # No arranca la app hasta que el healthcheck de Postgres pase. Sin esto,
+        # la app arrancaría contra una base que todavía no acepta conexiones.
         condition: service_healthy
+
     environment:
       # Activa el perfil "docker" -> carga application.yml + application-docker.yml
       - SPRING_PROFILES_ACTIVE=docker
@@ -23,24 +95,38 @@ services:
       - DB_URL=jdbc:postgresql://db:5432/${DB_NAME}
       - DB_USERNAME=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
+      # "update" ajusta las tablas a las entidades en cada arranque sin borrar
+      # datos. Es lo que permite agregar un campo, hacer down y up, y verlo
+      # reflejado en la base.
       - DDL_AUTO=update
 
   db:
     image: postgres:15-alpine
+    container_name: cowsvsclown-db
+    restart: unless-stopped
+
     ports:
       # "puerto_de_tu_maquina:puerto_del_contenedor"
       - "${DB_PORT}:5432"
+
     environment:
       - POSTGRES_DB=${DB_NAME}
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
+
     volumes:
+      # Los datos viven acá, fuera del contenedor: "down" borra el contenedor
+      # pero el volumen queda, así que no se pierde nada.
       - postgres_data:/var/lib/postgresql/data
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      # Le da 30 segundos de gracia al primer arranque (cuando Postgres crea la
+      # base) sin contar esos intentos como fallidos.
+      start_period: 30s
 
 volumes:
   postgres_data:
