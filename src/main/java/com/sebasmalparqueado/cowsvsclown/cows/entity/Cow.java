@@ -10,12 +10,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Vaca. Participa en las dos relaciones del modelo:
+ * Cow. Participates in both model relationships:
  *
  * <ul>
- *   <li><b>N a 1</b> con {@link Owner}: acá vive la llave foránea owner_id.</li>
- *   <li><b>N a M</b> con {@link Clown}: se resuelve con la tabla intermedia
- *       "clown_cow". Esta entidad es el lado <i>inverso</i> (mappedBy).</li>
+ *   <li><b>N to 1</b> with {@link Owner}: here lives the owner_id foreign key.</li>
+ *   <li><b>N to M</b> with {@link Clown}: resolved by the join table
+ *       "clown_cow". This entity is the <i>inverse</i> side (mappedBy).</li>
  * </ul>
  */
 @Entity
@@ -34,32 +34,32 @@ public class Cow {
     @Column(nullable = false, unique = true, length = 100)
     private String name;
 
-    /** Peso en kilogramos. */
+    /** Weight in kilograms. */
     @Column(nullable = false)
     private int weight;
 
-    /** Litros de leche que produce por día. */
+    /** Liters of milk produced per day. */
     @Column(nullable = false)
     private int milkperday;
 
-    /** Borrado lógico: misma idea que en {@link Owner}. */
+    /** Logical delete: same idea as in {@link Owner}. */
     @Builder.Default
     @Column(nullable = false)
     private boolean active = true;
 
     /**
-     * Lado inverso del N a M. {@code mappedBy = "cows"} dice que la tabla
-     * intermedia la administra {@link Clown}; los cambios hechos a esta lista
-     * NO se persisten. Por eso las asignaciones vaca-payaso se hacen siempre
-     * desde el payaso (ver {@code ClownService}).
+     * Inverse side of the N to M. {@code mappedBy = "cows"} means that the join
+     * table is managed by {@link Clown}; changes made to this list
+     * ARE NOT persisted. That's why cow-clown assignments are always done
+     * from the clown (see {@code ClownService}).
      */
     @ManyToMany(mappedBy = "cows", fetch = FetchType.LAZY)
     @Builder.Default
     private List<Clown> clowns = new ArrayList<>();
 
     /**
-     * Lado dueño del N a 1: la columna owner_id se crea en esta tabla.
-     * Es obligatoria, así que toda vaca tiene que nacer con un dueño válido.
+     * Owner side of the N to 1: the owner_id column is created in this table.
+     * It is mandatory, so every cow must be born with a valid owner.
      */
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "owner_id", nullable = false)

@@ -20,14 +20,14 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Reglas de negocio de los payasos y, sobre todo, el lugar donde se administra
- * la relación <b>N a M</b> con las vacas.
+ * Clown business rules and, most importantly, the place where the 
+ * <b>N to M</b> relationship with cows is managed.
  *
- * <p>Todas las asignaciones vaca-payaso se hacen desde acá por una razón de
- * JPA: {@link Clown} es el lado dueño de la relación (el que declara la
- * {@code @JoinTable}), y Hibernate solo mira la lista de ese lado para decidir
- * qué filas insertar o borrar en la tabla intermedia clown_cow. Modificar
- * {@code cow.getClowns()} no persistiría nada.</p>
+ * <p>All cow-clown assignments are done here because of JPA: 
+ * {@link Clown} is the owner side of the relationship (the one that declares
+ * {@code @JoinTable}), and Hibernate only looks at the list on this side to decide
+ * which rows to insert or delete in the join table clown_cow. Modifying
+ * {@code cow.getClowns()} wouldn't persist anything.</p>
  */
 @Service
 @RequiredArgsConstructor
@@ -37,9 +37,9 @@ public class ClownService {
     private final IClownRepository clownRepository;
     private final ICowRepository cowRepository;
 
-    // ============================== Lectura ===============================
+    // ============================== Read ===============================
 
-    /** Todos los payasos activos, con sus vacas. */
+    /** All active clowns, with their cows. */
     @Transactional(readOnly = true)
     public List<ClownResponse> getAll() {
         return clownRepository.findAllActiveWithCows()
@@ -48,7 +48,7 @@ public class ClownService {
                 .toList();
     }
 
-    /** Un payaso activo por id. Lanza 404 si no está. */
+    /** An active clown by id. Throws 404 if not found. */
     @Transactional(readOnly = true)
     public ClownResponse getById(UUID id) {
         Clown clown = clownRepository.findActiveWithCowsById(id)
@@ -57,8 +57,8 @@ public class ClownService {
     }
 
     /**
-     * Payasos que cuidan una vaca: la relación N a M leída desde el otro lado.
-     * Se valida primero que la vaca exista para poder responder 404.
+     * Clowns taking care of a cow: the N to M relationship read from the other side.
+     * First validates that the cow exists to return a 404.
      */
     @Transactional(readOnly = true)
     public List<ClownResponse> getByCow(UUID cowId) {
@@ -70,29 +70,29 @@ public class ClownService {
                 .toList();
     }
 
-    // ============================= Escritura ==============================
+    // ============================= Write ==============================
 
     /**
-     * Crea un payaso y, si la petición trae {@code cowIds}, le asigna esas
-     * vacas de una vez (inserción N a M).
+     * Creates a clown and, if the request brings {@code cowIds}, assigns those
+     * cows at once (N to M insertion).
      *
-     * <p>Las vacas se agregan <b>antes</b> del save: como Clown es el lado
-     * dueño, al guardarlo Hibernate inserta el payaso y en el mismo commit las
-     * filas de clown_cow.</p>
+     * <p>Cows are added <b>before</b> the save: since Clown is the owner side, 
+     * when saving, Hibernate inserts the clown and in the same commit inserts
+     * the rows in clown_cow.</p>
      */
     @Transactional
     public ClownResponse create(ClownRequest request) {
         if (clownRepository.existsByNameIgnoreCase(request.name())) {
             throw new ConflictException(
-                    "Ya existe un payaso llamado '%s'".formatted(request.name()));
+                    "There is already a clown named '%s'".formatted(request.name()));
         }
 
         Clown clown = ClownMapper.toEntity(request);
 
         for (UUID cowId : request.cowIdsOrEmpty()) {
             Cow cow = findActiveCowOrThrow(cowId);
-            // Ignora ids repetidos dentro de la misma petición: el resultado
-            // que pidió el cliente se cumple igual.
+            // Ignores duplicated ids within the same request: the result
+            // requested by the client is still fulfilled.
             if (!clown.hasCow(cow)) {
                 clown.addCow(cow);
             }
@@ -100,32 +100,32 @@ public class ClownService {
 
         Clown saved = clownRepository.save(clown);
 
-        log.info("Payaso creado id={} con {} vaca(s) asignada(s)",
+        log.info("Clown created id={} with {} assigned cow(s)",
                 saved.getId(), saved.getCows().size());
 
         return ClownMapper.toResponse(saved);
     }
 
     /**
-     * Actualiza nombre y/o descripción. Los campos en null no se tocan
-     * (semántica de PATCH). Las vacas asignadas se manejan con
-     * {@link #assignCow} y {@link #unassignCow}.
+     * Updates name and/or description. Null fields are not touched
+     * (PATCH semantics). Assigned cows are managed with
+     * {@link #assignCow} and {@link #unassignCow}.
      */
     @Transactional
     public ClownResponse update(UUID id, ClownUpdateRequest request) {
         if (request.isEmpty()) {
             throw new BadRequestException(
-                    "La petición no trae ningún campo para actualizar");
+                    "The request has no fields to update");
         }
 
         Clown clown = clownRepository.findActiveWithCowsById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Clown", id));
 
         if (request.name() != null) {
-            // AndIdNot: si no se cambia el nombre, el payaso no debe chocar consigo mismo.
+            // AndIdNot: if the name is not changed, the clown shouldn't collide with itself.
             if (clownRepository.existsByNameIgnoreCaseAndIdNot(request.name(), id)) {
                 throw new ConflictException(
-                        "Ya existe otro payaso llamado '%s'".formatted(request.name()));
+                        "There is already another clown named '%s'".formatted(request.name()));
             }
             clown.setName(request.name());
         }
@@ -134,13 +134,13 @@ public class ClownService {
         }
 
         Clown updated = clownRepository.save(clown);
-        log.info("Payaso actualizado id={}", id);
+        log.info("Clown updated id={}", id);
         return ClownMapper.toResponse(updated);
     }
 
     /**
-     * <b>Inserción N a M:</b> asigna una vaca existente a un payaso existente.
-     * Es una fila nueva en la tabla intermedia clown_cow.
+     * <b>N to M insertion:</b> assigns an existing cow to an existing clown.
+     * It's a new row in the clown_cow join table.
      */
     @Transactional
     public ClownResponse assignCow(UUID clownId, UUID cowId) {
@@ -149,28 +149,28 @@ public class ClownService {
 
         Cow cow = findActiveCowOrThrow(cowId);
 
-        // Acá sí se responde 409 y no se ignora en silencio: el cliente pidió
-        // explícitamente crear una asignación que ya existía.
+        // Here a 409 is responded and not silently ignored: the client explicitly
+        // requested to create an assignment that already existed.
         if (clown.hasCow(cow)) {
             throw new ConflictException(
-                    "La vaca '%s' ya está asignada al payaso '%s'"
+                    "The cow '%s' is already assigned to the clown '%s'"
                             .formatted(cow.getName(), clown.getName()));
         }
 
         clown.addCow(cow);
         Clown updated = clownRepository.save(clown);
 
-        log.info("Vaca id={} asignada al payaso id={}", cowId, clownId);
+        log.info("Cow id={} assigned to clown id={}", cowId, clownId);
         return ClownMapper.toResponse(updated);
     }
 
     /**
-     * Quita la asignación entre un payaso y una vaca: borra la fila de
+     * Removes the assignment between a clown and a cow: deletes the row in
      * clown_cow.
      *
-     * <p>Este sí es un borrado físico, y está bien que lo sea: la tabla
-     * intermedia no guarda datos propios, solo representa el vínculo. Ni la
-     * vaca ni el payaso se tocan.</p>
+     * <p>This IS a physical deletion, and it's fine: the join table doesn't
+     * store its own data, it only represents the link. Neither the cow nor 
+     * the clown is touched.</p>
      */
     @Transactional
     public ClownResponse unassignCow(UUID clownId, UUID cowId) {
@@ -181,23 +181,23 @@ public class ClownService {
 
         if (!clown.hasCow(cow)) {
             throw new ConflictException(
-                    "La vaca '%s' no está asignada al payaso '%s'"
+                    "The cow '%s' is not assigned to the clown '%s'"
                             .formatted(cow.getName(), clown.getName()));
         }
 
         clown.removeCow(cow);
         Clown updated = clownRepository.save(clown);
 
-        log.info("Vaca id={} desasignada del payaso id={}", cowId, clownId);
+        log.info("Cow id={} unassigned from clown id={}", cowId, clownId);
         return ClownMapper.toResponse(updated);
     }
 
     /**
-     * Baja lógica del payaso.
+     * Clown logical delete.
      *
-     * <p>Sus filas de clown_cow no se borran: el payaso desaparece de las
-     * consultas porque todas filtran por activo, pero queda el registro de qué
-     * vacas cuidaba.</p>
+     * <p>Its rows in clown_cow are not deleted: the clown disappears from 
+     * queries because they all filter by active, but the record of which 
+     * cows it took care of remains.</p>
      */
     @Transactional
     public void softDelete(UUID id) {
@@ -206,12 +206,12 @@ public class ClownService {
 
         clown.setActive(false);
         clownRepository.save(clown);
-        log.info("Payaso dado de baja id={}", id);
+        log.info("Clown logically deleted id={}", id);
     }
 
-    // ============================= Utilitarios ============================
+    // ============================= Utilities ============================
 
-    /** Busca una vaca activa o lanza 404. Se repite en varios métodos de acá. */
+    /** Finds an active cow or throws 404. Repeated in several methods here. */
     private Cow findActiveCowOrThrow(UUID cowId) {
         return cowRepository.findByIdAndActiveTrue(cowId)
                 .orElseThrow(() -> ResourceNotFoundException.of("Cow", cowId));

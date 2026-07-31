@@ -5,16 +5,16 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.UUID;
 
 /**
- * Versión corta de un payaso, para cuando aparece dentro de una vaca.
- * Misma razón que {@code CowSummaryResponse}: evitar el JSON infinito.
+ * Short version of a clown, used when it appears inside a cow.
+ * Same reason as {@code CowSummaryResponse}: to avoid infinite JSON recursion.
  */
-@Schema(description = "Datos mínimos de un payaso, usados dentro de otros recursos")
+@Schema(description = "Minimal clown data, used within other resources")
 public record ClownSummaryResponse(
 
-        @Schema(description = "Identificador del payaso")
+        @Schema(description = "Clown identifier")
         UUID id,
 
-        @Schema(description = "Nombre del payaso", example = "Pennywise")
+        @Schema(description = "Clown name", example = "Pennywise")
         String name
 ) {
 }

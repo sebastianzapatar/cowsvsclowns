@@ -10,42 +10,42 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Datos para crear una vaca. Resuelve las dos relaciones de una sola vez:
+ * Data to create a cow. Resolves both relationships at once:
  *
  * <ul>
- *   <li>{@code ownerId} es la inserción <b>1 a N</b>: obligatorio, porque la
- *       columna owner_id de la tabla "cows" es NOT NULL.</li>
- *   <li>{@code clownIds} es la inserción <b>N a M</b>: opcional, cada id crea
- *       una fila en la tabla intermedia clown_cow.</li>
+ *   <li>{@code ownerId} is the <b>1 to N</b> insertion: mandatory, because the
+ *       owner_id column in the "cows" table is NOT NULL.</li>
+ *   <li>{@code clownIds} is the <b>N to M</b> insertion: optional, each id creates
+ *       a row in the clown_cow join table.</li>
  * </ul>
  */
-@Schema(description = "Datos para crear una vaca, con su dueño y sus payasos")
+@Schema(description = "Data to create a cow, with its owner and its clowns")
 public record CowRequest(
 
-        @NotBlank(message = "el nombre es obligatorio")
-        @Size(min = 2, max = 100, message = "el nombre debe tener entre 2 y 100 caracteres")
-        @Schema(description = "Nombre de la vaca (no se puede repetir)", example = "Lola")
+        @NotBlank(message = "name is mandatory")
+        @Size(min = 2, max = 100, message = "name must be between 2 and 100 characters")
+        @Schema(description = "Cow's name (must be unique)", example = "Lola")
         String name,
 
-        @Min(value = 1, message = "el peso debe ser mayor que 0")
-        @Schema(description = "Peso en kilogramos", example = "450")
+        @Min(value = 1, message = "weight must be greater than 0")
+        @Schema(description = "Weight in kilograms", example = "450")
         int weight,
 
-        @Min(value = 0, message = "la producción de leche no puede ser negativa")
-        @Schema(description = "Litros de leche por día", example = "12")
+        @Min(value = 0, message = "milk production cannot be negative")
+        @Schema(description = "Liters of milk per day", example = "12")
         int milkperday,
 
-        @NotNull(message = "la vaca tiene que tener un dueño")
-        @Schema(description = "Id del dueño al que pertenece la vaca (relación 1 a N)",
+        @NotNull(message = "the cow must have an owner")
+        @Schema(description = "Id of the owner to whom the cow belongs (1 to N relationship)",
                 example = "1")
         Long ownerId,
 
-        @Schema(description = "Ids de los payasos a los que se asigna la vaca "
-                + "(relación N a M). Opcional.")
+        @Schema(description = "Ids of the clowns to which the cow is assigned "
+                + "(N to M relationship). Optional.")
         List<UUID> clownIds
 ) {
 
-    /** Devuelve los ids de payasos nunca en null, para no chequearlo en el servicio. */
+    /** Returns clown ids, never null, to avoid checking it in the service. */
     public List<UUID> clownIdsOrEmpty() {
         return clownIds == null ? List.of() : clownIds;
     }

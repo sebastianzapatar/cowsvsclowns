@@ -6,26 +6,26 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * Vaca que se crea <b>en la misma petición</b> que su dueño.
+ * Cow that is created <b>in the same request</b> as its owner.
  *
- * <p>No lleva ownerId: el dueño es justamente el que se está creando. Es la
- * forma más directa de la inserción 1 a N, porque el cascade = ALL del
- * {@code @OneToMany} guarda dueño y vacas en una sola transacción.</p>
+ * <p>It does not have ownerId: the owner is precisely the one being created. It is
+ * the most direct way of 1 to N insertion, because the cascade = ALL of
+ * {@code @OneToMany} saves owner and cows in a single transaction.</p>
  */
-@Schema(description = "Vaca creada junto con su dueño en una sola petición")
+@Schema(description = "Cow created together with its owner in a single request")
 public record OwnerCowRequest(
 
-        @NotBlank(message = "el nombre de la vaca es obligatorio")
-        @Size(min = 2, max = 100, message = "el nombre debe tener entre 2 y 100 caracteres")
-        @Schema(description = "Nombre de la vaca", example = "Lola")
+        @NotBlank(message = "cow name is mandatory")
+        @Size(min = 2, max = 100, message = "name must be between 2 and 100 characters")
+        @Schema(description = "Cow name", example = "Lola")
         String name,
 
-        @Min(value = 1, message = "el peso debe ser mayor que 0")
-        @Schema(description = "Peso en kilogramos", example = "450")
+        @Min(value = 1, message = "weight must be greater than 0")
+        @Schema(description = "Weight in kilograms", example = "450")
         int weight,
 
-        @Min(value = 0, message = "la producción de leche no puede ser negativa")
-        @Schema(description = "Litros de leche por día", example = "12")
+        @Min(value = 0, message = "milk production cannot be negative")
+        @Schema(description = "Liters of milk per day", example = "12")
         int milkperday
 ) {
 }

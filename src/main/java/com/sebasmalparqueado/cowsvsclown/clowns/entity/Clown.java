@@ -9,12 +9,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Payaso. Es el lado <b>dueño</b> de la relación N a M con {@link Cow}: acá se
- * declara la {@code @JoinTable}, así que Hibernate solo mira esta lista para
- * decidir qué filas insertar o borrar en la tabla intermedia.
+ * Clown. It is the <b>owner</b> side of the N to M relationship with {@link Cow}: here
+ * the {@code @JoinTable} is declared, so Hibernate only looks at this list to
+ * decide which rows to insert or delete in the join table.
  *
- * <p>Consecuencia práctica: para asignar una vaca a un payaso hay que tocar
- * {@code clown.getCows()}. Tocar {@code cow.getClowns()} no guarda nada.</p>
+ * <p>Practical consequence: to assign a cow to a clown you have to modify
+ * {@code clown.getCows()}. Modifying {@code cow.getClowns()} doesn't save anything.</p>
  */
 @Entity
 @Table(name = "clowns")
@@ -35,15 +35,15 @@ public class Clown {
     @Column(length = 255)
     private String description;
 
-    /** Borrado lógico: misma idea que en las otras entidades. */
+    /** Logical delete: same idea as in the other entities. */
     @Builder.Default
     @Column(nullable = false)
     private boolean active = true;
 
     /**
-     * Lado dueño del N a M. La tabla intermedia "clown_cow" solo tiene las dos
-     * llaves foráneas, y el par (clown_id, cow_id) es único: eso evita que la
-     * misma vaca quede asignada dos veces al mismo payaso.
+     * Owner side of the N to M. The join table "clown_cow" only has the two
+     * foreign keys, and the pair (clown_id, cow_id) is unique: this prevents
+     * the same cow from being assigned twice to the same clown.
      */
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
@@ -59,24 +59,24 @@ public class Clown {
     private List<Cow> cows = new ArrayList<>();
 
     /**
-     * Asigna una vaca sincronizando los dos lados en memoria.
+     * Assigns a cow, synchronizing both sides in memory.
      *
-     * <p>Persistir solo depende de {@code cows}, pero mantener también
-     * {@code cow.getClowns()} al día evita que un objeto ya cargado en la misma
-     * transacción devuelva una lista desactualizada al mapear la respuesta.</p>
+     * <p>Persisting only depends on {@code cows}, but keeping
+     * {@code cow.getClowns()} up to date also prevents an object already loaded
+     * in the same transaction from returning an outdated list when mapping the response.</p>
      */
     public void addCow(Cow cow) {
         cows.add(cow);
         cow.getClowns().add(this);
     }
 
-    /** Quita la asignación con esa vaca en los dos lados. */
+    /** Removes the assignment with that cow on both sides. */
     public void removeCow(Cow cow) {
         cows.remove(cow);
         cow.getClowns().remove(this);
     }
 
-    /** True si esta vaca ya está asignada a este payaso. */
+    /** True if this cow is already assigned to this clown. */
     public boolean hasCow(Cow cow) {
         return cows.stream().anyMatch(c -> c.getId().equals(cow.getId()));
     }

@@ -19,58 +19,58 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Traductor central de excepciones a respuestas HTTP.
+ * Central translator of exceptions into HTTP responses.
  *
- * <p>Gracias a este {@code @RestControllerAdvice} los controllers no llevan un
- * solo try/catch: lanzan la excepción de negocio que corresponda y acá se
- * decide el código y el cuerpo. Todas las respuestas salen como
- * {@link ErrorResponse}, así el cliente siempre recibe la misma forma.</p>
+ * <p>Thanks to this {@code @RestControllerAdvice}, controllers don't need a
+ * single try/catch: they throw the corresponding business exception, and here
+ * the status code and body are decided. All responses are formatted as
+ * {@link ErrorResponse}, so the client always receives the same structure.</p>
  *
- * <p>Spring elige el handler más específico que aplique, por eso el
- * {@code handleUnexpected(Exception)} del final solo entra cuando ningún otro
- * coincide.</p>
+ * <p>Spring chooses the most specific handler that applies, which is why
+ * {@code handleUnexpected(Exception)} at the end is only triggered when no other
+ * handler matches.</p>
  */
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
 
-    // ======================= Excepciones propias ==========================
+    // ======================= Custom Exceptions ==========================
 
-    /** 404: se pidió algo que no está en la base o está dado de baja. */
+    /** 404: requested resource is not in the database or was logically deleted. */
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleResourceNotFound(
             ResourceNotFoundException e, HttpServletRequest request) {
 
-        log.warn("404 en {}: {}", request.getRequestURI(), e.getMessage());
+        log.warn("404 in {}: {}", request.getRequestURI(), e.getMessage());
         return build(HttpStatus.NOT_FOUND, e.getMessage(), request);
     }
 
-    /** 400: regla de negocio incumplida. */
+    /** 400: business rule violated. */
     @ExceptionHandler(BadRequestException.class)
     public ResponseEntity<ErrorResponse> handleBadRequest(
             BadRequestException e, HttpServletRequest request) {
 
-        log.warn("400 en {}: {}", request.getRequestURI(), e.getMessage());
+        log.warn("400 in {}: {}", request.getRequestURI(), e.getMessage());
         return build(HttpStatus.BAD_REQUEST, e.getMessage(), request);
     }
 
-    /** 409: choca con el estado actual (duplicados, asignaciones repetidas). */
+    /** 409: conflicts with current state (duplicates, repeated assignments). */
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ErrorResponse> handleConflict(
             ConflictException e, HttpServletRequest request) {
 
-        log.warn("409 en {}: {}", request.getRequestURI(), e.getMessage());
+        log.warn("409 in {}: {}", request.getRequestURI(), e.getMessage());
         return build(HttpStatus.CONFLICT, e.getMessage(), request);
     }
 
-    // ==================== Validación de la petición =======================
+    // ==================== Request Validation =======================
 
     /**
-     * 400: falló la validación de un {@code @Valid @RequestBody}.
+     * 400: failed validation for a {@code @Valid @RequestBody}.
      *
-     * <p>Devuelve el mapa campo -> mensaje. El nombre del campo se saca de
-     * {@code getField()}; los errores que no son de campo (validaciones a nivel
-     * de la clase completa) se agrupan bajo la clave "object".</p>
+     * <p>Returns the map field -> message. The field name is extracted from
+     * {@code getField()}; errors that are not field-specific (class-level
+     * validations) are grouped under the key "object".</p>
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleMethodArgumentNotValid(
@@ -79,32 +79,32 @@ public class GlobalExceptionHandler {
         Map<String, String> errors = new LinkedHashMap<>();
 
         e.getBindingResult().getFieldErrors().forEach(fieldError ->
-                // merge y no put: si un campo tiene dos reglas rotas se juntan
-                // los mensajes en vez de perderse uno.
+                // merge and not put: if a field has two broken rules, the messages
+                // are concatenated instead of losing one.
                 errors.merge(
                         fieldError.getField(),
                         String.valueOf(fieldError.getDefaultMessage()),
-                        (viejo, nuevo) -> viejo + "; " + nuevo));
+                        (oldVal, newVal) -> oldVal + "; " + newVal));
 
         e.getBindingResult().getGlobalErrors().forEach(globalError ->
                 errors.merge(
                         "object",
                         String.valueOf(globalError.getDefaultMessage()),
-                        (viejo, nuevo) -> viejo + "; " + nuevo));
+                        (oldVal, newVal) -> oldVal + "; " + newVal));
 
-        log.warn("Validación fallida en {}: {}", request.getRequestURI(), errors);
+        log.warn("Validation failed in {}: {}", request.getRequestURI(), errors);
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.ofValidation(
-                        "Hay campos inválidos en la petición",
+                        "There are invalid fields in the request",
                         request.getRequestURI(),
                         errors));
     }
 
     /**
-     * 400: falló la validación de un parámetro suelto (@PathVariable o
-     * @RequestParam anotado con @Min, @NotBlank, etc.).
+     * 400: failed validation for a single parameter (@PathVariable or
+     * @RequestParam annotated with @Min, @NotBlank, etc.).
      */
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolation(
@@ -116,130 +116,128 @@ public class GlobalExceptionHandler {
                         String.valueOf(violation.getPropertyPath()),
                         violation.getMessage()));
 
-        log.warn("Parámetros inválidos en {}: {}", request.getRequestURI(), errors);
+        log.warn("Invalid parameters in {}: {}", request.getRequestURI(), errors);
 
         return ResponseEntity
                 .status(HttpStatus.BAD_REQUEST)
                 .body(ErrorResponse.ofValidation(
-                        "Hay parámetros inválidos en la petición",
+                        "There are invalid parameters in the request",
                         request.getRequestURI(),
                         errors));
     }
 
     /**
-     * 400: el JSON del body está roto o un valor no se puede convertir al tipo
-     * esperado (por ejemplo {@code "weight": "mucho"} en un campo int).
+     * 400: the body JSON is malformed or a value cannot be converted to the
+     * expected type (e.g., {@code "weight": "much"} in an int field).
      *
-     * <p>No se devuelve {@code e.getMessage()} porque trae la clase Java y la
-     * posición exacta del parser: es ruido para el cliente.</p>
+     * <p>{@code e.getMessage()} is not returned because it includes the Java class
+     * and the exact parser position, which is noise for the client.</p>
      */
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleNotReadable(
             HttpMessageNotReadableException e, HttpServletRequest request) {
 
-        log.warn("Body ilegible en {}: {}", request.getRequestURI(), e.getMessage());
+        log.warn("Unreadable body in {}: {}", request.getRequestURI(), e.getMessage());
         return build(HttpStatus.BAD_REQUEST,
-                "El cuerpo de la petición no es un JSON válido o algún campo "
-                        + "tiene un tipo que no corresponde",
+                "The request body is not valid JSON or a field has an unexpected type",
                 request);
     }
 
     /**
-     * 400: un valor de la URL no se pudo convertir. El caso típico acá es un
-     * UUID mal escrito en {@code /api/cows/{id}}.
+     * 400: a URL value could not be converted. The typical case here is a
+     * malformed UUID in {@code /api/cows/{id}}.
      */
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErrorResponse> handleTypeMismatch(
             MethodArgumentTypeMismatchException e, HttpServletRequest request) {
 
-        String tipoEsperado = e.getRequiredType() == null
-                ? "el tipo esperado"
+        String expectedType = e.getRequiredType() == null
+                ? "the expected type"
                 : e.getRequiredType().getSimpleName();
 
         return build(HttpStatus.BAD_REQUEST,
-                "El valor '%s' no es válido para el parámetro '%s' (se esperaba %s)"
-                        .formatted(e.getValue(), e.getName(), tipoEsperado),
+                "The value '%s' is not valid for the parameter '%s' (expected %s)"
+                        .formatted(e.getValue(), e.getName(), expectedType),
                 request);
     }
 
-    /** 400: falta un query param obligatorio. */
+    /** 400: missing a required query param. */
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErrorResponse> handleMissingParam(
             MissingServletRequestParameterException e, HttpServletRequest request) {
 
         return build(HttpStatus.BAD_REQUEST,
-                "Falta el parámetro obligatorio '%s'".formatted(e.getParameterName()),
+                "Missing required parameter '%s'".formatted(e.getParameterName()),
                 request);
     }
 
-    // ========================= Errores de ruta ============================
+    // ========================= Route Errors ============================
 
-    /** 404: la URL no corresponde a ningún endpoint. */
+    /** 404: the URL does not correspond to any endpoint. */
     @ExceptionHandler(NoResourceFoundException.class)
     public ResponseEntity<ErrorResponse> handleNoResourceFound(
             NoResourceFoundException e, HttpServletRequest request) {
 
         return build(HttpStatus.NOT_FOUND,
-                "La ruta %s no existe en esta API".formatted(request.getRequestURI()),
+                "The path %s does not exist in this API".formatted(request.getRequestURI()),
                 request);
     }
 
-    /** 405: la ruta existe pero no acepta ese verbo HTTP. */
+    /** 405: the route exists but does not accept this HTTP verb. */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ErrorResponse> handleMethodNotSupported(
             HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
 
         return build(HttpStatus.METHOD_NOT_ALLOWED,
-                "El método %s no está permitido en esta ruta. Permitidos: %s"
+                "The %s method is not allowed on this path. Allowed: %s"
                         .formatted(e.getMethod(), e.getSupportedHttpMethods()),
                 request);
     }
 
-    // ====================== Errores de base de datos ======================
+    // ====================== Database Errors ======================
 
     /**
-     * 409: la base rechazó la operación por una restricción (único, NOT NULL,
-     * llave foránea).
+     * 409: the database rejected the operation due to a constraint (unique, NOT NULL,
+     * foreign key).
      *
-     * <p>Es la red de seguridad: los servicios ya validan estos casos antes de
-     * guardar, pero entre la validación y el insert puede colarse otra petición
-     * concurrente. Se loguea completo y al cliente se le manda un mensaje
-     * genérico, porque el texto de Postgres expone nombres de tablas y
-     * constraints.</p>
+     * <p>This is a safety net: services already validate these cases before
+     * saving, but a concurrent request might sneak in between validation and insert.
+     * The full exception is logged and a generic message is sent to the client,
+     * because Postgres text exposes table names and constraints.</p>
      */
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrity(
             DataIntegrityViolationException e, HttpServletRequest request) {
 
-        log.error("Violación de integridad en {}", request.getRequestURI(), e);
+        log.error("Integrity violation in {}", request.getRequestURI(), e);
         return build(HttpStatus.CONFLICT,
-                "La operación viola una restricción de la base de datos "
-                        + "(dato duplicado o referencia inexistente)",
+                "The operation violates a database constraint "
+                        + "(duplicated data or missing reference)",
                 request);
     }
 
-    // ======================== Red de seguridad ============================
+    // ======================== Safety Net ============================
 
     /**
-     * 500: cualquier cosa que no se previó.
+     * 500: anything unpredicted.
      *
-     * <p>Se loguea con stack trace completo y al cliente se le devuelve un
-     * mensaje neutro: filtrar acá evita que un NullPointerException termine
-     * mostrándole al usuario rutas de clases internas.</p>
+     * <p>Logged with full stack trace, and a neutral message is returned to the client:
+     * filtering here prevents a NullPointerException from exposing internal class paths
+     * to the user.</p>
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpected(
             Exception e, HttpServletRequest request) {
 
-        log.error("Error no controlado en {}", request.getRequestURI(), e);
+        log.error("Unhandled error in {}", request.getRequestURI(), e);
         return build(HttpStatus.INTERNAL_SERVER_ERROR,
-                "Ocurrió un error inesperado en el servidor",
+                "An unexpected server error occurred",
                 request);
     }
 
-    // =========================== Utilitario ===============================
+    // =========================== Utility ===============================
 
-    /** Arma la respuesta para que ningún handler repita el mismo bloque. */
+    /** Builds the response so no handler repeats the same block. */
     private ResponseEntity<ErrorResponse> build(HttpStatus status,
                                                 String message,
                                                 HttpServletRequest request) {

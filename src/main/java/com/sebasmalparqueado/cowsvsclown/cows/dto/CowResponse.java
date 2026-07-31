@@ -8,31 +8,31 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Lo que la API devuelve de una vaca: sus datos propios más las dos relaciones
- * ya resueltas, el dueño (1 a N) y los payasos (N a M), ambos en versión corta.
+ * What the API returns for a cow: its own data plus the two resolved relationships,
+ * the owner (1 to N) and the clowns (N to M), both in short version.
  */
-@Schema(description = "Vaca con su dueño y sus payasos")
+@Schema(description = "Cow with its owner and its clowns")
 public record CowResponse(
 
-        @Schema(description = "Identificador de la vaca")
+        @Schema(description = "Cow identifier")
         UUID id,
 
-        @Schema(description = "Nombre de la vaca", example = "Lola")
+        @Schema(description = "Cow name", example = "Lola")
         String name,
 
-        @Schema(description = "Peso en kilogramos", example = "450")
+        @Schema(description = "Weight in kilograms", example = "450")
         int weight,
 
-        @Schema(description = "Litros de leche por día", example = "12")
+        @Schema(description = "Liters of milk per day", example = "12")
         int milkperday,
 
-        @Schema(description = "false si la vaca fue dada de baja lógicamente")
+        @Schema(description = "false if the cow was logically deleted")
         boolean active,
 
-        @Schema(description = "Dueño de la vaca (lado 1 de la relación 1 a N)")
+        @Schema(description = "Cow owner (side 1 of the 1 to N relationship)")
         OwnerSummaryResponse owner,
 
-        @Schema(description = "Payasos asignados a esta vaca (relación N a M)")
+        @Schema(description = "Clowns assigned to this cow (N to M relationship)")
         List<ClownSummaryResponse> clowns
 ) {
 }

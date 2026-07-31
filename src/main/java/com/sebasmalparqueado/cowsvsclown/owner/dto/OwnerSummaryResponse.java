@@ -3,16 +3,16 @@ package com.sebasmalparqueado.cowsvsclown.owner.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 
 /**
- * Versión corta de un dueño, para cuando aparece dentro de una vaca.
- * Misma razón que {@code CowSummaryResponse}: evitar el JSON infinito.
+ * Short version of an owner, for when it appears inside a cow.
+ * Same reason as {@code CowSummaryResponse}: avoiding infinite JSON.
  */
-@Schema(description = "Datos mínimos de un dueño, usados dentro de otros recursos")
+@Schema(description = "Minimal owner data, used inside other resources")
 public record OwnerSummaryResponse(
 
-        @Schema(description = "Identificador del dueño", example = "1")
+        @Schema(description = "Owner identifier", example = "1")
         Long id,
 
-        @Schema(description = "Nombre y apellido", example = "Sebastián Zapata")
+        @Schema(description = "Name and last name", example = "Sebastián Zapata")
         String fullName
 ) {
 }

@@ -9,43 +9,43 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Acceso a datos de {@link Owner}.
+ * Data access for {@link Owner}.
  *
- * <p>Al extender {@code JpaRepository} ya vienen gratis save, findAll, count,
- * etc. Los métodos de acá se resuelven solos por el nombre (Spring Data arma la
- * consulta leyendo "findAllByActiveTrue..."), salvo los que llevan
- * {@code @Query}, que se escriben a mano para poder usar JOIN FETCH.</p>
+ * <p>By extending {@code JpaRepository} we get save, findAll, count,
+ * etc. for free. The methods here are resolved automatically by name (Spring Data
+ * builds the query reading "findAllByActiveTrue..."), except for those with
+ * {@code @Query}, which are written by hand to be able to use JOIN FETCH.</p>
  */
 public interface IOwnerRepository extends JpaRepository<Owner, Long> {
 
     /**
-     * Un dueño activo por id. Es el findById que se usa en toda la aplicación:
-     * el de JpaRepository también devolvería los dados de baja lógicamente.
+     * An active owner by id. This is the findById used throughout the application:
+     * the one from JpaRepository would also return the logically deleted ones.
      */
     Optional<Owner> findByIdAndActiveTrue(Long id);
 
-    /** ¿Ya hay un dueño activo con ese nombre y apellido? Sirve para no duplicar. */
+    /** Is there already an active owner with that first and last name? Used to avoid duplicates. */
     boolean existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndActiveTrue(
             String firstName, String lastName);
 
     /**
-     * Igual que el anterior pero excluyendo un id.
-     * Se usa al actualizar: sin el "AndIdNot", un dueño chocaría consigo mismo
-     * al guardarlo sin cambiarle el nombre.
+     * Same as above but excluding an id.
+     * Used when updating: without the "AndIdNot", an owner would collide with themselves
+     * when saving without changing their name.
      */
     boolean existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndActiveTrueAndIdNot(
             String firstName, String lastName, Long id);
 
     /**
-     * Todos los dueños activos con sus vacas ya cargadas.
+     * All active owners with their cows already loaded.
      *
-     * <p>El LEFT JOIN FETCH trae dueños y vacas en UNA sola consulta. Sin eso,
-     * al ser la relación LAZY, el mapper dispararía una consulta por cada dueño
-     * al pedirle las vacas: el problema N+1.</p>
+     * <p>The LEFT JOIN FETCH brings owners and cows in a SINGLE query. Without this,
+     * since the relationship is LAZY, the mapper would trigger a query for each owner
+     * when asking for their cows: the N+1 problem.</p>
      *
-     * <p>Es LEFT y no INNER para que también salgan los dueños sin vacas.
-     * No hace falta DISTINCT: Hibernate 6 ya elimina los duplicados que genera
-     * el join al construir las entidades.</p>
+     * <p>It is LEFT and not INNER so that owners without cows also appear.
+     * DISTINCT is not necessary: Hibernate 6 already removes the duplicates generated
+     * by the join when building the entities.</p>
      */
     @Query("""
             SELECT o FROM Owner o
@@ -55,7 +55,7 @@ public interface IOwnerRepository extends JpaRepository<Owner, Long> {
             """)
     List<Owner> findAllActiveWithCows();
 
-    /** Un dueño activo con sus vacas ya cargadas, en una sola consulta. */
+    /** An active owner with their cows already loaded, in a single query. */
     @Query("""
             SELECT o FROM Owner o
             LEFT JOIN FETCH o.cows

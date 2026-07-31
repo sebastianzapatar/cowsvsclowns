@@ -5,23 +5,23 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.UUID;
 
 /**
- * Versión corta de una vaca, para cuando aparece dentro de otro recurso
- * (la lista de vacas de un dueño o de un payaso).
+ * Short version of a cow, for when it appears inside another resource
+ * (the cow list of an owner or a clown).
  *
- * <p>Existe para cortar la recursión: si ahí se devolviera {@code CowResponse}
- * completo, ese traería su dueño y sus payasos, que a su vez traerían sus
- * vacas... y el JSON no terminaría nunca.</p>
+ * <p>It exists to break the recursion: if the complete {@code CowResponse}
+ * was returned there, it would bring its owner and its clowns, which in turn
+ * would bring their cows... and the JSON would never end.</p>
  */
-@Schema(description = "Datos mínimos de una vaca, usados dentro de otros recursos")
+@Schema(description = "Minimal cow data, used inside other resources")
 public record CowSummaryResponse(
 
-        @Schema(description = "Identificador de la vaca")
+        @Schema(description = "Cow identifier")
         UUID id,
 
-        @Schema(description = "Nombre de la vaca", example = "Lola")
+        @Schema(description = "Cow name", example = "Lola")
         String name,
 
-        @Schema(description = "Litros de leche por día", example = "12")
+        @Schema(description = "Liters of milk per day", example = "12")
         int milkperday
 ) {
 }

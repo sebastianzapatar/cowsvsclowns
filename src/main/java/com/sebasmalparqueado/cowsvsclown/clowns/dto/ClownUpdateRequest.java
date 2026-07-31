@@ -4,25 +4,25 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Size;
 
 /**
- * Datos para modificar un payaso con PATCH. Los campos en null significan
- * "no lo toques"; ver la explicación completa en {@code CowUpdateRequest}.
+ * Data to modify a clown via PATCH. Null fields mean "do not touch";
+ * see full explanation in {@code CowUpdateRequest}.
  *
- * <p>Las vacas asignadas no se cambian acá: para eso están los endpoints
+ * <p>Assigned cows are not changed here: for that use the endpoints
  * {@code POST/DELETE /api/clowns/{id}/cows/{cowId}}.</p>
  */
-@Schema(description = "Campos a modificar de un payaso. Los que no se envían se dejan igual.")
+@Schema(description = "Clown fields to modify. Fields not sent are left unchanged.")
 public record ClownUpdateRequest(
 
-        @Size(min = 2, max = 100, message = "el nombre debe tener entre 2 y 100 caracteres")
-        @Schema(description = "Nuevo nombre", example = "Pennywise el bailarín")
+        @Size(min = 2, max = 100, message = "name must be between 2 and 100 characters")
+        @Schema(description = "New name", example = "Pennywise the dancing clown")
         String name,
 
-        @Size(max = 255, message = "la descripción no puede pasar de 255 caracteres")
-        @Schema(description = "Nueva descripción", example = "Ahora sale del circo")
+        @Size(max = 255, message = "description cannot exceed 255 characters")
+        @Schema(description = "New description", example = "Now works at the circus")
         String description
 ) {
 
-    /** True si la petición no trae ningún campo: no habría nada que actualizar. */
+    /** True if the request has no fields: there is nothing to update. */
     public boolean isEmpty() {
         return name == null && description == null;
     }

@@ -10,23 +10,23 @@ import com.sebasmalparqueado.cowsvsclown.owner.entity.Owner;
 import java.util.List;
 
 /**
- * Traduce entre la entidad {@link Owner} y sus DTO. Misma idea que
- * {@code CowMapper}: clase de utilidad, sin estado.
+ * Translates between the {@link Owner} entity and its DTOs. Same idea as
+ * {@code CowMapper}: stateless utility class.
  */
 public final class OwnerMapper {
 
     private OwnerMapper() {
-        // Clase de utilidad: no se instancia.
+        // Utility class: not instantiated.
     }
 
     /**
-     * Arma el dueño y, si la petición trae vacas, se las cuelga con
+     * Builds the owner and, if the request brings cows, hangs them with
      * {@link Owner#addCow(Cow)}.
      *
-     * <p>Acá está la inserción 1 a N en cascada: gracias al
-     * {@code cascade = CascadeType.ALL} del {@code @OneToMany}, guardar el
-     * dueño alcanza para que Hibernate inserte también todas sus vacas con el
-     * owner_id ya puesto, en una sola transacción.</p>
+     * <p>Here is the cascading 1 to N insertion: thanks to the
+     * {@code cascade = CascadeType.ALL} of the {@code @OneToMany}, saving the
+     * owner is enough for Hibernate to also insert all its cows with the
+     * owner_id already set, in a single transaction.</p>
      */
     public static Owner toEntity(OwnerRequest request) {
         if (request == null) return null;
@@ -44,8 +44,8 @@ public final class OwnerMapper {
     }
 
     /**
-     * Convierte a la respuesta completa, con solo los nombres de las vacas activas.
-     * Hay que llamarlo dentro de la transacción: {@code getCows()} es LAZY.
+     * Converts to the full response, with only the names of the active cows.
+     * It must be called within the transaction: {@code getCows()} is LAZY.
      */
     public static OwnerResponse toResponse(Owner owner) {
         if (owner == null) return null;
@@ -66,7 +66,7 @@ public final class OwnerMapper {
         );
     }
 
-    /** Versión corta, para cuando el dueño aparece dentro de una vaca. */
+    /** Short version, for when the owner appears inside a cow. */
     public static OwnerSummaryResponse toSummary(Owner owner) {
         if (owner == null) return null;
         return new OwnerSummaryResponse(

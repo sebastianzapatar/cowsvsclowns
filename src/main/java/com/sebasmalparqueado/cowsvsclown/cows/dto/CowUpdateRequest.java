@@ -5,33 +5,33 @@ import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 
 /**
- * Datos para modificar una vaca con PATCH.
+ * Data to modify a cow with PATCH.
  *
- * <p>Los tipos son objeto ({@code Integer}, no {@code int}) justamente para
- * poder distinguir "no mandaron el campo" (null) de "mandaron un 0". Con
- * {@code int} el ausente llegaría como 0 y borraría el valor que ya estaba,
- * que es la diferencia entre un PATCH y un PUT.</p>
+ * <p>The types are objects ({@code Integer}, not {@code int}) precisely to
+ * distinguish "they didn't send the field" (null) from "they sent a 0". With
+ * {@code int} the missing field would arrive as 0 and overwrite the existing value,
+ * which is the difference between a PATCH and a PUT.</p>
  *
- * <p>Por eso tampoco hay {@code @NotNull}: cada campo se valida solo si viene.
- * El dueño y los payasos no se cambian acá, tienen sus propios endpoints.</p>
+ * <p>That's also why there is no {@code @NotNull}: each field is validated only if it comes.
+ * The owner and clowns are not changed here, they have their own endpoints.</p>
  */
-@Schema(description = "Campos a modificar de una vaca. Los que no se envían se dejan igual.")
+@Schema(description = "Fields to modify of a cow. Those not sent are left unchanged.")
 public record CowUpdateRequest(
 
-        @Size(min = 2, max = 100, message = "el nombre debe tener entre 2 y 100 caracteres")
-        @Schema(description = "Nuevo nombre", example = "Lola II")
+        @Size(min = 2, max = 100, message = "name must be between 2 and 100 characters")
+        @Schema(description = "New name", example = "Lola II")
         String name,
 
-        @Min(value = 1, message = "el peso debe ser mayor que 0")
-        @Schema(description = "Nuevo peso en kilogramos", example = "470")
+        @Min(value = 1, message = "weight must be greater than 0")
+        @Schema(description = "New weight in kilograms", example = "470")
         Integer weight,
 
-        @Min(value = 0, message = "la producción de leche no puede ser negativa")
-        @Schema(description = "Nueva producción de leche por día", example = "15")
+        @Min(value = 0, message = "milk production cannot be negative")
+        @Schema(description = "New milk production per day", example = "15")
         Integer milkperday
 ) {
 
-    /** True si la petición no trae ningún campo: no habría nada que actualizar. */
+    /** True if the request brings no fields: there would be nothing to update. */
     public boolean isEmpty() {
         return name == null && weight == null && milkperday == null;
     }

@@ -25,60 +25,60 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Endpoints de vacas.
+ * Cow endpoints.
  *
- * <p>El controller no tiene lógica: recibe la petición, se la pasa al servicio
- * y traduce el resultado a un código HTTP. Tampoco tiene try/catch: de los
- * errores se encarga {@code GlobalExceptionHandler}.</p>
+ * <p>The controller has no logic: it receives the request, passes it to the service
+ * and translates the result into an HTTP status code. It also has no try/catch:
+ * errors are handled by {@code GlobalExceptionHandler}.</p>
  */
 @RestController
 @RequestMapping("/api/cows")
 @RequiredArgsConstructor
 @Slf4j
-@Validated // habilita las validaciones de los parámetros sueltos (@NotBlank de abajo)
-@Tag(name = "Vacas", description = "CRUD de vacas y manejo de su dueño (relación 1 a N)")
+@Validated // enables validation on independent parameters (e.g. @NotBlank below)
+@Tag(name = "Cows", description = "Cow CRUD and owner management (1 to N relationship)")
 public class CowController {
 
     private final CowService cowService;
 
     @GetMapping
     @Operation(
-            summary = "Listar vacas",
-            description = "Devuelve todas las vacas activas con su dueño y sus payasos. "
-                    + "Las dadas de baja lógicamente no aparecen."
+            summary = "List cows",
+            description = "Returns all active cows with their owner and clowns. "
+                    + "Logically deleted ones do not appear."
     )
-    @ApiResponse(responseCode = "200", description = "Listado obtenido")
+    @ApiResponse(responseCode = "200", description = "List obtained")
     public ResponseEntity<List<CowResponse>> getAllCows() {
         return ResponseEntity.ok(cowService.getCows());
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Buscar una vaca por id")
+    @Operation(summary = "Find a cow by id")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Vaca encontrada"),
-            @ApiResponse(responseCode = "404", description = "No existe esa vaca",
+            @ApiResponse(responseCode = "200", description = "Cow found"),
+            @ApiResponse(responseCode = "404", description = "Cow does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CowResponse> getCowById(
-            @Parameter(description = "Id de la vaca") @PathVariable UUID id) {
+            @Parameter(description = "Cow id") @PathVariable UUID id) {
 
         return ResponseEntity.ok(cowService.getById(id));
     }
 
     @GetMapping("/search")
     @Operation(
-            summary = "Buscar una vaca por nombre exacto",
-            description = "Usa la consulta en SQL nativo del repositorio. "
-                    + "No distingue mayúsculas de minúsculas."
+            summary = "Find a cow by exact name",
+            description = "Uses the native SQL query from the repository. "
+                    + "Case-insensitive."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Vaca encontrada"),
-            @ApiResponse(responseCode = "404", description = "No hay ninguna vaca con ese nombre",
+            @ApiResponse(responseCode = "200", description = "Cow found"),
+            @ApiResponse(responseCode = "404", description = "There is no cow with that name",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CowResponse> getCowByName(
-            @Parameter(description = "Nombre exacto de la vaca", example = "Lola")
-            @RequestParam @NotBlank(message = "el nombre a buscar no puede estar vacío")
+            @Parameter(description = "Exact name of the cow", example = "Lola")
+            @RequestParam @NotBlank(message = "the search name cannot be empty")
             String name) {
 
         return ResponseEntity.ok(cowService.getByName(name));
@@ -86,43 +86,43 @@ public class CowController {
 
     @GetMapping("/owner/{ownerId}")
     @Operation(
-            summary = "Listar las vacas de un dueño",
-            description = "Es el lado N de la relación 1 a N, consultado desde la vaca."
+            summary = "List cows of an owner",
+            description = "This is the N side of the 1 to N relationship, queried from the cow."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Listado obtenido"),
-            @ApiResponse(responseCode = "404", description = "No existe ese dueño",
+            @ApiResponse(responseCode = "200", description = "List obtained"),
+            @ApiResponse(responseCode = "404", description = "Owner does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<List<CowResponse>> getCowsByOwner(
-            @Parameter(description = "Id del dueño") @PathVariable Long ownerId) {
+            @Parameter(description = "Owner id") @PathVariable Long ownerId) {
 
         return ResponseEntity.ok(cowService.getByOwner(ownerId));
     }
 
     @PostMapping
     @Operation(
-            summary = "Crear una vaca",
+            summary = "Create a cow",
             description = """
-                    Resuelve las dos relaciones de una sola vez:
-                    - ownerId (obligatorio) crea el vínculo 1 a N con el dueño.
-                    - clownIds (opcional) crea los vínculos N a M con los payasos.
+                    Resolves both relationships at once:
+                    - ownerId (mandatory) creates the 1 to N link with the owner.
+                    - clownIds (optional) creates the N to M links with the clowns.
                     """
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Vaca creada"),
-            @ApiResponse(responseCode = "400", description = "Datos inválidos",
+            @ApiResponse(responseCode = "201", description = "Cow created"),
+            @ApiResponse(responseCode = "400", description = "Invalid data",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "El dueño o algún payaso no existe",
+            @ApiResponse(responseCode = "404", description = "Owner or some clown does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Ya hay una vaca con ese nombre",
+            @ApiResponse(responseCode = "409", description = "There is already a cow with that name",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CowResponse> createCow(@Valid @RequestBody CowRequest request) {
         CowResponse created = cowService.create(request);
 
-        // 201 + cabecera Location con la URL del recurso nuevo: es lo que
-        // corresponde en REST para un POST que crea algo.
+        // 201 + Location header with the URL of the new resource: this is
+        // the proper REST way for a POST that creates something.
         return ResponseEntity
                 .created(URI.create("/api/cows/" + created.id()))
                 .body(created);
@@ -130,66 +130,66 @@ public class CowController {
 
     @PatchMapping("/{id}")
     @Operation(
-            summary = "Modificar una vaca",
-            description = "Solo cambia los campos que se envían; los que no vengan se dejan igual."
+            summary = "Modify a cow",
+            description = "Only changes the fields that are sent; those not provided are left unchanged."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Vaca actualizada"),
-            @ApiResponse(responseCode = "400", description = "Datos inválidos o petición vacía",
+            @ApiResponse(responseCode = "200", description = "Cow updated"),
+            @ApiResponse(responseCode = "400", description = "Invalid data or empty request",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "No existe esa vaca",
+            @ApiResponse(responseCode = "404", description = "Cow does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Ya hay otra vaca con ese nombre",
+            @ApiResponse(responseCode = "409", description = "There is already another cow with that name",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CowResponse> updateCow(
-            @Parameter(description = "Id de la vaca") @PathVariable UUID id,
+            @Parameter(description = "Cow id") @PathVariable UUID id,
             @Valid @RequestBody CowUpdateRequest request) {
 
         /*
-         * Va 200 y no 206. El 206 (Partial Content) es para respuestas que
-         * traen solo un pedazo del recurso, como una descarga por rangos; no
-         * tiene nada que ver con que la actualización sea parcial.
+         * It's 200 and not 206. 206 (Partial Content) is for responses that
+         * bring only a piece of the resource, like a range download; it has
+         * nothing to do with a partial update.
          */
         return ResponseEntity.ok(cowService.update(id, request));
     }
 
     @PatchMapping("/{id}/owner/{ownerId}")
     @Operation(
-            summary = "Cambiarle el dueño a una vaca",
-            description = "Relación 1 a N: mueve la vaca de un dueño a otro "
-                    + "actualizando la columna owner_id."
+            summary = "Change the owner of a cow",
+            description = "1 to N relationship: moves the cow from one owner to another "
+                    + "by updating the owner_id column."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Dueño cambiado"),
-            @ApiResponse(responseCode = "404", description = "No existe la vaca o el dueño",
+            @ApiResponse(responseCode = "200", description = "Owner changed"),
+            @ApiResponse(responseCode = "404", description = "Cow or owner does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "La vaca ya era de ese dueño",
+            @ApiResponse(responseCode = "409", description = "The cow already belonged to that owner",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<CowResponse> changeOwner(
-            @Parameter(description = "Id de la vaca") @PathVariable UUID id,
-            @Parameter(description = "Id del nuevo dueño") @PathVariable Long ownerId) {
+            @Parameter(description = "Cow id") @PathVariable UUID id,
+            @Parameter(description = "New owner id") @PathVariable Long ownerId) {
 
         return ResponseEntity.ok(cowService.changeOwner(id, ownerId));
     }
 
     @DeleteMapping("/{id}")
     @Operation(
-            summary = "Dar de baja una vaca",
-            description = "Baja lógica: la fila no se borra, se marca active = false "
-                    + "y deja de aparecer en las consultas."
+            summary = "Logically delete a cow",
+            description = "Logical delete: the row is not deleted, it is marked active = false "
+                    + "and stops appearing in queries."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Vaca dada de baja"),
-            @ApiResponse(responseCode = "404", description = "No existe esa vaca",
+            @ApiResponse(responseCode = "204", description = "Cow deleted"),
+            @ApiResponse(responseCode = "404", description = "Cow does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> deleteCow(
-            @Parameter(description = "Id de la vaca") @PathVariable UUID id) {
+            @Parameter(description = "Cow id") @PathVariable UUID id) {
 
         cowService.softDelete(id);
-        // 204 No Content: la operación salió bien y no hay cuerpo que devolver.
+        // 204 No Content: the operation succeeded and there is no body to return.
         return ResponseEntity.noContent().build();
     }
 }

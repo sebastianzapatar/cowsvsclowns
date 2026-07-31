@@ -1,10 +1,9 @@
 # =============================================================================
-# PERFIL "docker"  ->  se activa con: SPRING_PROFILES_ACTIVE=docker
+# "docker" PROFILE  ->  activated with: SPRING_PROFILES_ACTIVE=docker
 # =============================================================================
-# Para correr con "docker compose up". Los valores llegan como variables de
-# entorno desde compose.yml (que a su vez las lee del .env).
-# El host de la base NO es localhost: es "db", el nombre del servicio en la red
-# de Docker.
+# To run with "docker compose up". Values arrive as environment variables
+# from compose.yml (which in turn reads them from .env).
+# The database host is NOT localhost: it's "db", the service name on the Docker network.
 # =============================================================================
 
 spring:
@@ -15,15 +14,15 @@ spring:
     driver-class-name: org.postgresql.Driver
 
     hikari:
-      # La app puede arrancar un instante antes de que Postgres acepte
-      # conexiones. Con esto reintenta durante 30 segundos en vez de morirse
-      # en el primer intento fallido.
+      # The app might start slightly before Postgres accepts connections.
+      # This allows it to retry for 30 seconds instead of crashing
+      # on the first failed attempt.
       initialization-fail-timeout: 30000
 
   jpa:
     hibernate:
-      # Llega desde compose.yml. "update" hace que al hacer down y up de nuevo
-      # las tablas se ajusten solas a las entidades, sin borrar los datos.
+      # Provided by compose.yml. "update" makes tables self-adjust
+      # when running down and up again, without deleting data.
       ddl-auto: ${DDL_AUTO:update}
     show-sql: true
 

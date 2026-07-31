@@ -11,28 +11,28 @@ import com.sebasmalparqueado.cowsvsclown.owner.mapper.OwnerMapper;
 import java.util.List;
 
 /**
- * Traduce entre la entidad {@link Cow} y sus DTO.
+ * Translates between the {@link Cow} entity and its DTOs.
  *
- * <p>La razón de que exista esta capa: la entidad tiene relaciones perezosas y
- * referencias circulares (vaca -> payasos -> vacas). Si el controller devolviera
- * la entidad directamente, Jackson recorrería esas referencias y produciría un
- * JSON infinito, además de disparar consultas fuera de la transacción.</p>
+ * <p>The reason this layer exists: the entity has lazy relationships and
+ * circular references (cow -> clowns -> cows). If the controller returned
+ * the entity directly, Jackson would traverse those references and produce an
+ * infinite JSON, as well as trigger queries outside the transaction.</p>
  *
- * <p>Es una clase de utilidad: constructor privado y métodos estáticos, no es
- * un bean de Spring porque no necesita inyectar nada.</p>
+ * <p>It is a utility class: private constructor and static methods, it's not
+ * a Spring bean because it doesn't need to inject anything.</p>
  */
 public final class CowMapper {
 
     private CowMapper() {
-        // Clase de utilidad: no se instancia.
+        // Utility class: not instantiated.
     }
 
     /**
-     * Arma la entidad con los datos propios de la vaca.
+     * Builds the entity with the cow's own data.
      *
-     * <p>El dueño y los payasos NO se resuelven acá: son entidades que hay que
-     * ir a buscar a la base, y el mapper no tiene repositorios. De eso se
-     * encarga {@code CowService}, que sí puede validar que existan.</p>
+     * <p>The owner and clowns are NOT resolved here: they are entities that must
+     * be fetched from the database, and the mapper doesn't have repositories.
+     * {@code CowService} takes care of that, as it can validate they exist.</p>
      */
     public static Cow toEntity(CowRequest request) {
         if (request == null) return null;
@@ -44,7 +44,7 @@ public final class CowMapper {
                 .build();
     }
 
-    /** Igual que el anterior, para las vacas que llegan anidadas en un dueño. */
+    /** Same as above, for cows that arrive nested in an owner. */
     public static Cow toEntity(OwnerCowRequest request) {
         if (request == null) return null;
         return Cow.builder()
@@ -56,11 +56,11 @@ public final class CowMapper {
     }
 
     /**
-     * Convierte la entidad en la respuesta completa.
+     * Converts the entity into the full response.
      *
-     * <p>Ojo: hay que llamarlo <b>dentro</b> de la transacción, porque acá se
-     * tocan {@code getOwner()} y {@code getClowns()}, que son LAZY. Si se
-     * llamara después de cerrada, Hibernate lanzaría LazyInitializationException.</p>
+     * <p>Warning: must be called <b>inside</b> the transaction, because here
+     * {@code getOwner()} and {@code getClowns()} are accessed, which are LAZY. If
+     * called after closed, Hibernate would throw LazyInitializationException.</p>
      */
     public static CowResponse toResponse(Cow cow) {
         if (cow == null) return null;
@@ -71,8 +71,8 @@ public final class CowMapper {
                 cow.getMilkperday(),
                 cow.isActive(),
                 OwnerMapper.toSummary(cow.getOwner()),
-                // Solo se muestran los payasos vigentes: los dados de baja
-                // siguen en la tabla intermedia pero no se exponen.
+                // Only active clowns are shown: logically deleted ones
+                // remain in the join table but are not exposed.
                 cow.getClowns().stream()
                         .filter(clown -> clown.isActive())
                         .map(ClownMapper::toSummary)
@@ -80,7 +80,7 @@ public final class CowMapper {
         );
     }
 
-    /** Versión corta, para cuando la vaca aparece dentro de un dueño o payaso. */
+    /** Short version, for when the cow appears inside an owner or clown. */
     public static CowSummaryResponse toSummary(Cow cow) {
         if (cow == null) return null;
         return new CowSummaryResponse(
@@ -90,7 +90,7 @@ public final class CowMapper {
         );
     }
 
-    /** Convierte una lista completa, saltándose las vacas dadas de baja. */
+    /** Converts a full list, skipping logically deleted cows. */
     public static List<CowSummaryResponse> toActiveSummaries(List<Cow> cows) {
         if (cows == null) return List.of();
         return cows.stream()

@@ -8,39 +8,38 @@ import java.time.LocalDateTime;
 import java.util.Map;
 
 /**
- * Formato único de error de toda la API. Que todos los errores salgan con la
- * misma forma es lo que le permite al cliente manejarlos sin adivinar.
+ * Global API error format. Ensuring all errors have the same structure
+ * allows clients to handle them predictably.
  *
- * <p>{@code @JsonInclude(NON_NULL)} hace que {@code validationErrors} no
- * aparezca en el JSON cuando es null, es decir en todos los errores que no son
- * de validación de campos.</p>
+ * <p>{@code @JsonInclude(NON_NULL)} hides {@code validationErrors} from
+ * the JSON when it is null, which is true for all non-validation errors.</p>
  */
 @JsonInclude(JsonInclude.Include.NON_NULL)
-@Schema(description = "Respuesta estándar de error de la API")
+@Schema(description = "Standard API error response")
 public record ErrorResponse(
 
-        @Schema(description = "Código HTTP", example = "404")
+        @Schema(description = "HTTP status code", example = "404")
         int status,
 
-        @Schema(description = "Nombre del código HTTP", example = "Not Found")
+        @Schema(description = "HTTP status name", example = "Not Found")
         String error,
 
-        @Schema(description = "Explicación del problema",
-                example = "No existe Cow con id 3fa85f64-5717-4562-b3fc-2c963f66afa6")
+        @Schema(description = "Explanation of the problem",
+                example = "There is no Cow with id 3fa85f64-5717-4562-b3fc-2c963f66afa6")
         String message,
 
-        @Schema(description = "Ruta que se invocó", example = "/api/cows/3fa85f64")
+        @Schema(description = "Invoked path", example = "/api/cows/3fa85f64")
         String path,
 
-        @Schema(description = "Momento en que ocurrió el error")
+        @Schema(description = "Timestamp when the error occurred")
         LocalDateTime timestamp,
 
-        @Schema(description = "Errores por campo. Solo viene en fallos de "
-                + "validación; en el resto de errores se omite.")
+        @Schema(description = "Field-specific errors. Only present in validation "
+                + "failures; omitted in all other errors.")
         Map<String, String> validationErrors
 ) {
 
-    /** Error normal: sin detalle por campo. */
+    /** Normal error: without field-specific details. */
     public static ErrorResponse of(HttpStatus status, String message, String path) {
         return new ErrorResponse(
                 status.value(),
@@ -52,7 +51,7 @@ public record ErrorResponse(
         );
     }
 
-    /** Error de validación: agrega el mapa campo -> qué está mal. */
+    /** Validation error: includes the field -> error message map. */
     public static ErrorResponse ofValidation(String message,
                                              String path,
                                              Map<String, String> validationErrors) {

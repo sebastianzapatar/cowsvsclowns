@@ -7,28 +7,28 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Lo que la API devuelve de un payaso, con las vacas que tiene asignadas
- * (el otro extremo de la relación N a M).
+ * What the API returns for a clown, with the cows assigned to it
+ * (the other end of the N to M relationship).
  */
-@Schema(description = "Payaso con las vacas que tiene asignadas")
+@Schema(description = "Clown with the cows assigned to it")
 public record ClownResponse(
 
-        @Schema(description = "Identificador del payaso")
+        @Schema(description = "Clown identifier")
         UUID id,
 
-        @Schema(description = "Nombre del payaso", example = "Pennywise")
+        @Schema(description = "Clown name", example = "Pennywise")
         String name,
 
-        @Schema(description = "Descripción", example = "Vive en la alcantarilla")
+        @Schema(description = "Description", example = "Lives in the sewer")
         String description,
 
-        @Schema(description = "false si el payaso fue dado de baja lógicamente")
+        @Schema(description = "false if the clown was logically deleted")
         boolean active,
 
-        @Schema(description = "Cuántas vacas activas tiene asignadas", example = "2")
+        @Schema(description = "How many active cows are assigned to it", example = "2")
         int totalCows,
 
-        @Schema(description = "Vacas activas asignadas")
+        @Schema(description = "Assigned active cows")
         List<CowSummaryResponse> cows
 ) {
 }

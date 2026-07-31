@@ -1,12 +1,10 @@
 package com.sebasmalparqueado.cowsvsclown.common.exceptions;
 
 /**
- * La petición choca con el estado actual de los datos. Se traduce a un 409.
+ * Thrown when an operation breaks a business rule (e.g., duplicated name)
+ * or when trying to link entities that cannot be linked. Translates to a 409 Conflict.
  *
- * <p>La diferencia con {@link BadRequestException}: acá la petición es válida,
- * el problema es que el recurso ya existe o ya está en ese estado. Ejemplos:
- * crear una vaca con un nombre repetido, o asignar dos veces la misma vaca al
- * mismo payaso.</p>
+ * <p>It is unchecked for the same reasons as {@link ResourceNotFoundException}.</p>
  */
 public class ConflictException extends RuntimeException {
 

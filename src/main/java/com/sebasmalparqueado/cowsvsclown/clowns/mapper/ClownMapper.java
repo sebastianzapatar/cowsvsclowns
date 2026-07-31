@@ -10,20 +10,21 @@ import com.sebasmalparqueado.cowsvsclown.cows.mapper.CowMapper;
 import java.util.List;
 
 /**
- * Traduce entre la entidad {@link Clown} y sus DTO. Misma idea que
- * {@code CowMapper}: clase de utilidad, sin estado.
+ * Translates between the {@link Clown} entity and its DTOs. Same idea as
+ * {@code CowMapper}: utility class, stateless.
  */
 public final class ClownMapper {
 
     private ClownMapper() {
-        // Clase de utilidad: no se instancia.
+        // Utility class: not instantiated.
     }
 
     /**
-     * Arma el payaso con sus datos propios.
+     * Builds the clown with its own data.
      *
-     * <p>Las vacas de {@code cowIds} no se resuelven acá: hay que buscarlas en
-     * la base y verificar que existan, y eso es trabajo de {@code ClownService}.</p>
+     * <p>The cows from {@code cowIds} are not resolved here: they must be
+     * looked up in the database and verified to exist, and that is the job
+     * of {@code ClownService}.</p>
      */
     public static Clown toEntity(ClownRequest request) {
         if (request == null) return null;
@@ -35,8 +36,8 @@ public final class ClownMapper {
     }
 
     /**
-     * Convierte a la respuesta completa, con las vacas resumidas.
-     * Hay que llamarlo dentro de la transacción: {@code getCows()} es LAZY.
+     * Converts to the full response, with summarized cows.
+     * Must be called within a transaction: {@code getCows()} is LAZY.
      */
     public static ClownResponse toResponse(Clown clown) {
         if (clown == null) return null;
@@ -53,7 +54,7 @@ public final class ClownMapper {
         );
     }
 
-    /** Versión corta, para cuando el payaso aparece dentro de una vaca. */
+    /** Short version, for when the clown appears inside a cow. */
     public static ClownSummaryResponse toSummary(Clown clown) {
         if (clown == null) return null;
         return new ClownSummaryResponse(

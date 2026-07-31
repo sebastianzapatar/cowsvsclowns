@@ -8,11 +8,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Dueño de vacas. Es el lado "1" de la relación 1 a N con {@link Cow}.
+ * Cow owner. It is the "1" side of the 1 to N relationship with {@link Cow}.
  *
- * <p>Un dueño tiene muchas vacas; una vaca pertenece a un solo dueño.
- * La llave foránea (owner_id) NO vive acá sino en la tabla "cows": en JPA la FK
- * siempre queda del lado del {@code @ManyToOne}.</p>
+ * <p>An owner has many cows; a cow belongs to a single owner.
+ * The foreign key (owner_id) does NOT live here but in the "cows" table: in JPA the FK
+ * always stays on the {@code @ManyToOne} side.</p>
  */
 @Entity
 @Table(name = "owners")
@@ -34,21 +34,21 @@ public class Owner {
     private String lastName;
 
     /**
-     * Borrado lógico. En la base nunca se elimina un registro: se marca en
-     * false y deja de aparecer en las consultas. Así se conserva el histórico
-     * y no quedan vacas apuntando a un dueño que ya no existe.
+     * Logical delete. A record is never deleted from the database: it is marked as
+     * false and stops appearing in queries. This preserves the history
+     * and leaves no cows pointing to an owner that no longer exists.
      */
     @Builder.Default
     @Column(nullable = false)
     private boolean active = true;
 
     /**
-     * Lado inverso del 1 a N: {@code mappedBy = "owner"} significa que quien
-     * manda en la relación es el campo {@code owner} de Cow.
+     * Inverse side of the 1 to N: {@code mappedBy = "owner"} means that the
+     * field {@code owner} in Cow rules the relationship.
      *
-     * <p>cascade = ALL + orphanRemoval hacen que al guardar un dueño se guarden
-     * sus vacas nuevas, y que al sacar una vaca de esta lista se borre de la
-     * base. LAZY evita traer todas las vacas cada vez que se lee un dueño.</p>
+     * <p>cascade = ALL + orphanRemoval make it so that when an owner is saved,
+     * its new cows are saved, and when a cow is removed from this list, it is deleted from the
+     * database. LAZY avoids fetching all cows every time an owner is read.</p>
      */
     @OneToMany(
             mappedBy = "owner",
@@ -60,25 +60,25 @@ public class Owner {
     private List<Cow> cows = new ArrayList<>();
 
     /**
-     * Agrega una vaca sincronizando los dos lados de la relación.
+     * Adds a cow synchronizing both sides of the relationship.
      *
-     * <p>Es el punto clave de la inserción 1 a N: si solo se hiciera
-     * {@code owner.getCows().add(cow)} sin asignar {@code cow.setOwner(this)},
-     * Hibernate intentaría guardar la vaca con owner_id en null y fallaría por
-     * la restricción NOT NULL de la columna.</p>
+     * <p>It is the key point of the 1 to N insertion: if only
+     * {@code owner.getCows().add(cow)} was done without assigning {@code cow.setOwner(this)},
+     * Hibernate would try to save the cow with owner_id in null and fail due to
+     * the column's NOT NULL constraint.</p>
      */
     public void addCow(Cow cow) {
         cows.add(cow);
         cow.setOwner(this);
     }
 
-    /** Quita una vaca de este dueño y corta la referencia inversa. */
+    /** Removes a cow from this owner and breaks the inverse reference. */
     public void removeCow(Cow cow) {
         cows.remove(cow);
         cow.setOwner(null);
     }
 
-    /** Nombre completo, usado por los DTO de respuesta. */
+    /** Full name, used by response DTOs. */
     public String getFullName() {
         return firstName + " " + lastName;
     }

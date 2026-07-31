@@ -23,77 +23,77 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Endpoints de payasos.
+ * Clown endpoints.
  *
- * <p>Acá viven las operaciones de la relación N a M, porque {@code Clown} es el
- * lado dueño: los sub-recursos {@code /api/clowns/{id}/cows/{cowId}} son los que
- * crean y borran filas en la tabla intermedia clown_cow.</p>
+ * <p>Here live the operations for the N to M relationship, because {@code Clown} is the
+ * owner side: the sub-resources {@code /api/clowns/{id}/cows/{cowId}} are the ones
+ * that create and delete rows in the join table clown_cow.</p>
  */
 @RestController
 @RequestMapping("/api/clowns")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "Payasos", description = "CRUD de payasos y asignación de vacas (relación N a M)")
+@Tag(name = "Clowns", description = "Clown CRUD and cow assignment (N to M relationship)")
 public class ClownController {
 
     private final ClownService clownService;
 
     @GetMapping
     @Operation(
-            summary = "Listar payasos",
-            description = "Devuelve todos los payasos activos con las vacas que tienen asignadas."
+            summary = "List clowns",
+            description = "Returns all active clowns with their assigned cows."
     )
-    @ApiResponse(responseCode = "200", description = "Listado obtenido")
+    @ApiResponse(responseCode = "200", description = "List obtained")
     public ResponseEntity<List<ClownResponse>> getAllClowns() {
         return ResponseEntity.ok(clownService.getAll());
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Buscar un payaso por id")
+    @Operation(summary = "Find a clown by id")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Payaso encontrado"),
-            @ApiResponse(responseCode = "404", description = "No existe ese payaso",
+            @ApiResponse(responseCode = "200", description = "Clown found"),
+            @ApiResponse(responseCode = "404", description = "Clown does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ClownResponse> getClownById(
-            @Parameter(description = "Id del payaso") @PathVariable UUID id) {
+            @Parameter(description = "Clown id") @PathVariable UUID id) {
 
         return ResponseEntity.ok(clownService.getById(id));
     }
 
     @GetMapping("/cow/{cowId}")
     @Operation(
-            summary = "Listar los payasos que cuidan una vaca",
-            description = "Es la relación N a M leída desde el lado de la vaca."
+            summary = "List clowns that take care of a cow",
+            description = "This is the N to M relationship read from the cow's side."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Listado obtenido"),
-            @ApiResponse(responseCode = "404", description = "No existe esa vaca",
+            @ApiResponse(responseCode = "200", description = "List obtained"),
+            @ApiResponse(responseCode = "404", description = "Cow does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<List<ClownResponse>> getClownsByCow(
-            @Parameter(description = "Id de la vaca") @PathVariable UUID cowId) {
+            @Parameter(description = "Cow id") @PathVariable UUID cowId) {
 
         return ResponseEntity.ok(clownService.getByCow(cowId));
     }
 
     @PostMapping
     @Operation(
-            summary = "Crear un payaso",
+            summary = "Create a clown",
             description = """
-                    Si la petición trae la lista "cowIds", esas vacas quedan
-                    asignadas al payaso en la misma transacción: por cada id se
-                    inserta una fila en la tabla intermedia clown_cow.
-                    Las vacas tienen que existir y estar activas.
+                    If the request includes the "cowIds" list, those cows are
+                    assigned to the clown in the same transaction: for each id a
+                    row is inserted in the clown_cow join table.
+                    Cows must exist and be active.
                     """
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Payaso creado"),
-            @ApiResponse(responseCode = "400", description = "Datos inválidos",
+            @ApiResponse(responseCode = "201", description = "Clown created"),
+            @ApiResponse(responseCode = "400", description = "Invalid data",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "Alguna de las vacas no existe",
+            @ApiResponse(responseCode = "404", description = "One of the cows does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Ya hay un payaso con ese nombre",
+            @ApiResponse(responseCode = "409", description = "There is already a clown with that name",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ClownResponse> createClown(@Valid @RequestBody ClownRequest request) {
@@ -106,20 +106,20 @@ public class ClownController {
 
     @PatchMapping("/{id}")
     @Operation(
-            summary = "Modificar un payaso",
-            description = "Solo cambia los campos que se envían; los que no vengan se dejan igual."
+            summary = "Modify a clown",
+            description = "Only changes the fields that are sent; those not provided are left unchanged."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Payaso actualizado"),
-            @ApiResponse(responseCode = "400", description = "Datos inválidos o petición vacía",
+            @ApiResponse(responseCode = "200", description = "Clown updated"),
+            @ApiResponse(responseCode = "400", description = "Invalid data or empty request",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "No existe ese payaso",
+            @ApiResponse(responseCode = "404", description = "Clown does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Ya hay otro payaso con ese nombre",
+            @ApiResponse(responseCode = "409", description = "There is already another clown with that name",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ClownResponse> updateClown(
-            @Parameter(description = "Id del payaso") @PathVariable UUID id,
+            @Parameter(description = "Clown id") @PathVariable UUID id,
             @Valid @RequestBody ClownUpdateRequest request) {
 
         return ResponseEntity.ok(clownService.update(id, request));
@@ -127,58 +127,58 @@ public class ClownController {
 
     @PostMapping("/{clownId}/cows/{cowId}")
     @Operation(
-            summary = "Asignar una vaca a un payaso",
-            description = "Inserción N a M: crea la fila (clown_id, cow_id) en la "
-                    + "tabla intermedia clown_cow. Las dos entidades tienen que existir."
+            summary = "Assign a cow to a clown",
+            description = "N to M insertion: creates the row (clown_id, cow_id) in the "
+                    + "clown_cow join table. Both entities must exist."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Vaca asignada"),
-            @ApiResponse(responseCode = "404", description = "No existe el payaso o la vaca",
+            @ApiResponse(responseCode = "200", description = "Cow assigned"),
+            @ApiResponse(responseCode = "404", description = "Clown or cow does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Esa vaca ya estaba asignada a ese payaso",
+            @ApiResponse(responseCode = "409", description = "That cow was already assigned to that clown",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ClownResponse> assignCow(
-            @Parameter(description = "Id del payaso") @PathVariable UUID clownId,
-            @Parameter(description = "Id de la vaca") @PathVariable UUID cowId) {
+            @Parameter(description = "Clown id") @PathVariable UUID clownId,
+            @Parameter(description = "Cow id") @PathVariable UUID cowId) {
 
         return ResponseEntity.ok(clownService.assignCow(clownId, cowId));
     }
 
     @DeleteMapping("/{clownId}/cows/{cowId}")
     @Operation(
-            summary = "Quitarle una vaca a un payaso",
-            description = "Borra la fila de la tabla intermedia. Acá el borrado sí es "
-                    + "físico: la tabla clown_cow solo representa el vínculo, no guarda "
-                    + "datos propios. Ni la vaca ni el payaso se tocan."
+            summary = "Unassign a cow from a clown",
+            description = "Deletes the row in the join table. This is a physical "
+                    + "deletion: the clown_cow table only represents the link, it doesn't store "
+                    + "its own data. Neither the cow nor the clown is touched."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Vaca desasignada"),
-            @ApiResponse(responseCode = "404", description = "No existe el payaso o la vaca",
+            @ApiResponse(responseCode = "200", description = "Cow unassigned"),
+            @ApiResponse(responseCode = "404", description = "Clown or cow does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Esa vaca no estaba asignada a ese payaso",
+            @ApiResponse(responseCode = "409", description = "That cow was not assigned to that clown",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<ClownResponse> unassignCow(
-            @Parameter(description = "Id del payaso") @PathVariable UUID clownId,
-            @Parameter(description = "Id de la vaca") @PathVariable UUID cowId) {
+            @Parameter(description = "Clown id") @PathVariable UUID clownId,
+            @Parameter(description = "Cow id") @PathVariable UUID cowId) {
 
         return ResponseEntity.ok(clownService.unassignCow(clownId, cowId));
     }
 
     @DeleteMapping("/{id}")
     @Operation(
-            summary = "Dar de baja un payaso",
-            description = "Baja lógica: la fila no se borra, se marca active = false. "
-                    + "Sus asignaciones en clown_cow se conservan como histórico."
+            summary = "Logically delete a clown",
+            description = "Logical delete: the row is not deleted, it is marked active = false. "
+                    + "Its assignments in clown_cow are preserved as history."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Payaso dado de baja"),
-            @ApiResponse(responseCode = "404", description = "No existe ese payaso",
+            @ApiResponse(responseCode = "204", description = "Clown deleted"),
+            @ApiResponse(responseCode = "404", description = "Clown does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> deleteClown(
-            @Parameter(description = "Id del payaso") @PathVariable UUID id) {
+            @Parameter(description = "Clown id") @PathVariable UUID id) {
 
         clownService.softDelete(id);
         return ResponseEntity.noContent().build();

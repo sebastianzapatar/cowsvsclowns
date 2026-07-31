@@ -22,13 +22,13 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Reglas de negocio de las vacas. Es el servicio donde se ven las dos
- * relaciones funcionando juntas:
+ * Cow business rules. This is the service where the two
+ * relationships are seen working together:
  *
  * <ul>
- *   <li><b>1 a N</b> con el dueño, al crear ({@link #create}) y al traspasar
- *       una vaca de dueño ({@link #changeOwner}).</li>
- *   <li><b>N a M</b> con los payasos, cuando la petición de creación trae
+ *   <li><b>1 to N</b> with the owner, when creating ({@link #create}) and when
+ *       transferring a cow to another owner ({@link #changeOwner}).</li>
+ *   <li><b>N to M</b> with the clowns, when the creation request brings
  *       {@code clownIds}.</li>
  * </ul>
  */
@@ -41,14 +41,14 @@ public class CowService {
     private final IClownRepository clownRepository;
 
     /**
-     * Se inyecta el servicio y no el repositorio de dueños para reutilizar su
-     * "buscar activo o lanzar 404" y no repetir esa regla acá.
+     * The owner service is injected instead of the repository to reuse its
+     * "find active or throw 404" logic and not repeat that rule here.
      */
     private final OwnerService ownerService;
 
-    // ============================== Lectura ===============================
+    // ============================== Read ===============================
 
-    /** Todas las vacas activas, con dueño y payasos. */
+    /** All active cows, with owner and clowns. */
     @Transactional(readOnly = true)
     public List<CowResponse> getCows() {
         return cowRepository.findAllActiveWithRelations()
@@ -57,7 +57,7 @@ public class CowService {
                 .toList();
     }
 
-    /** Una vaca activa por id. Lanza 404 si no está. */
+    /** An active cow by id. Throws 404 if not found. */
     @Transactional(readOnly = true)
     public CowResponse getById(UUID id) {
         Cow cow = cowRepository.findActiveWithRelationsById(id)
@@ -66,8 +66,8 @@ public class CowService {
     }
 
     /**
-     * Vacas de un dueño. Antes de consultar se verifica que el dueño exista,
-     * para poder responder 404 en vez de una lista vacía que no dice nada.
+     * Cows of an owner. Before querying we verify that the owner exists,
+     * to be able to respond 404 instead of an empty list that says nothing.
      */
     @Transactional(readOnly = true)
     public List<CowResponse> getByOwner(Long ownerId) {
@@ -79,36 +79,36 @@ public class CowService {
                 .toList();
     }
 
-    /** Busca una vaca por nombre exacto usando la consulta en SQL nativo. */
+    /** Finds a cow by exact name using the native SQL query. */
     @Transactional(readOnly = true)
     public CowResponse getByName(String name) {
         Cow cow = cowRepository.findByNameSQL(name)
                 .orElseThrow(() -> new ResourceNotFoundException(
-                        "No existe una vaca llamada '%s'".formatted(name)));
+                        "There is no cow named '%s'".formatted(name)));
         return CowMapper.toResponse(cow);
     }
 
-    // ============================= Escritura ==============================
+    // ============================= Write ==============================
 
     /**
-     * Crea una vaca resolviendo sus dos relaciones.
+     * Creates a cow resolving both of its relationships.
      *
-     * <p><b>1 a N:</b> se busca el dueño por {@code ownerId} y se asigna con
-     * {@code owner.addCow(cow)}, que deja sincronizados los dos lados. Sin
-     * dueño no se puede crear, porque owner_id es NOT NULL.</p>
+     * <p><b>1 to N:</b> the owner is found by {@code ownerId} and assigned with
+     * {@code owner.addCow(cow)}, which keeps both sides synchronized. Without
+     * an owner it cannot be created, because owner_id is NOT NULL.</p>
      *
-     * <p><b>N a M:</b> si vienen {@code clownIds}, se asigna la vaca a cada
-     * payaso. Esto va <b>después</b> del save: la vaca necesita tener su id
-     * generado antes de poder insertar la fila en la tabla intermedia.</p>
+     * <p><b>N to M:</b> if {@code clownIds} are provided, the cow is assigned to each
+     * clown. This goes <b>after</b> the save: the cow needs to have its id
+     * generated before the row can be inserted in the join table.</p>
      */
     @Transactional
     public CowResponse create(CowRequest request) {
         if (cowRepository.existsByNameIgnoreCase(request.name())) {
             throw new ConflictException(
-                    "Ya existe una vaca llamada '%s'".formatted(request.name()));
+                    "There is already a cow named '%s'".formatted(request.name()));
         }
 
-        // --- Relación 1 a N: la vaca nace colgada de un dueño existente ---
+        // --- 1 to N relationship: the cow is born linked to an existing owner ---
         Owner owner = ownerService.getActiveEntityOrThrow(request.ownerId());
 
         Cow cow = CowMapper.toEntity(request);
@@ -116,34 +116,34 @@ public class CowService {
 
         Cow saved = cowRepository.save(cow);
 
-        // --- Relación N a M: asignación a los payasos indicados ---
+        // --- N to M relationship: assignment to the indicated clowns ---
         assignClowns(saved, request.clownIdsOrEmpty());
 
-        log.info("Vaca creada id={} dueño={} payasos={}",
+        log.info("Cow created id={} owner={} clowns={}",
                 saved.getId(), owner.getId(), request.clownIdsOrEmpty().size());
 
         return CowMapper.toResponse(saved);
     }
 
     /**
-     * Actualiza los datos propios de la vaca. Los campos en null no se tocan
-     * (semántica de PATCH). El dueño y los payasos tienen endpoints aparte.
+     * Updates the cow's own data. Fields in null are not touched
+     * (PATCH semantics). The owner and clowns have separate endpoints.
      */
     @Transactional
     public CowResponse update(UUID id, CowUpdateRequest request) {
         if (request.isEmpty()) {
             throw new BadRequestException(
-                    "La petición no trae ningún campo para actualizar");
+                    "The request has no fields to update");
         }
 
         Cow cow = cowRepository.findActiveWithRelationsById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("Cow", id));
 
         if (request.name() != null) {
-            // AndIdNot: si no se cambia el nombre, la vaca no debe chocar consigo misma.
+            // AndIdNot: if the name is not changed, the cow shouldn't collide with itself.
             if (cowRepository.existsByNameIgnoreCaseAndIdNot(request.name(), id)) {
                 throw new ConflictException(
-                        "Ya existe otra vaca llamada '%s'".formatted(request.name()));
+                        "There is already another cow named '%s'".formatted(request.name()));
             }
             cow.setName(request.name());
         }
@@ -155,17 +155,17 @@ public class CowService {
         }
 
         Cow updated = cowRepository.save(cow);
-        log.info("Vaca actualizada id={}", id);
+        log.info("Cow updated id={}", id);
         return CowMapper.toResponse(updated);
     }
 
     /**
-     * <b>Inserción 1 a N sobre una vaca que ya existe:</b> le cambia el dueño.
+     * <b>1 to N insertion on an already existing cow:</b> changes its owner.
      *
-     * <p>Lo único que actualiza la columna owner_id es {@code cow.setOwner()},
-     * porque el lado dueño de la relación es el {@code @ManyToOne}. Igual se
-     * ajustan las dos listas en memoria para que un objeto ya cargado en esta
-     * transacción no quede desactualizado.</p>
+     * <p>The only thing that updates the owner_id column is {@code cow.setOwner()},
+     * because the owner side of the relationship is the {@code @ManyToOne}. Both
+     * lists in memory are still adjusted so that an object already loaded in this
+     * transaction does not become outdated.</p>
      */
     @Transactional
     public CowResponse changeOwner(UUID cowId, Long newOwnerId) {
@@ -177,15 +177,15 @@ public class CowService {
 
         if (currentOwner != null && currentOwner.getId().equals(newOwnerId)) {
             throw new ConflictException(
-                    "La vaca '%s' ya pertenece a %s"
+                    "The cow '%s' already belongs to %s"
                             .formatted(cow.getName(), newOwner.getFullName()));
         }
 
         /*
-         * Se saca de la lista del dueño anterior con un remove directo y NO con
-         * owner.removeCow(), porque ese helper además hace cow.setOwner(null) y
-         * la relación tiene orphanRemoval = true: Hibernate interpretaría que la
-         * vaca quedó huérfana y la borraría de la base al hacer commit.
+         * It is removed from the previous owner's list with a direct remove and NOT with
+         * owner.removeCow(), because that helper also does cow.setOwner(null) and
+         * the relationship has orphanRemoval = true: Hibernate would interpret that the
+         * cow became an orphan and would delete it from the database upon commit.
          */
         if (currentOwner != null) {
             currentOwner.getCows().remove(cow);
@@ -193,16 +193,16 @@ public class CowService {
         newOwner.addCow(cow);
 
         Cow updated = cowRepository.save(cow);
-        log.info("Vaca id={} traspasada al dueño id={}", cowId, newOwnerId);
+        log.info("Cow id={} transferred to owner id={}", cowId, newOwnerId);
         return CowMapper.toResponse(updated);
     }
 
     /**
-     * Baja lógica de la vaca: {@code active = false}, la fila se queda.
+     * Logical delete of the cow: {@code active = false}, the row stays.
      *
-     * <p>Las filas de la tabla intermedia clown_cow no se tocan: así se conserva
-     * el histórico de qué payaso la cuidaba. Como los mappers filtran por
-     * activo, la vaca igual deja de aparecer en la respuesta de esos payasos.</p>
+     * <p>The rows in the clown_cow join table are not touched: this preserves
+     * the history of which clown took care of it. Since the mappers filter by
+     * active, the cow stops appearing in the response of those clowns anyway.</p>
      */
     @Transactional
     public void softDelete(UUID id) {
@@ -211,18 +211,18 @@ public class CowService {
 
         cow.setActive(false);
         cowRepository.save(cow);
-        log.info("Vaca dada de baja id={}", id);
+        log.info("Cow logically deleted id={}", id);
     }
 
-    // ============================= Utilitarios ============================
+    // ============================= Utilities ============================
 
     /**
-     * Asigna la vaca a cada payaso de la lista (relación N a M).
+     * Assigns the cow to each clown in the list (N to M relationship).
      *
-     * <p>La asignación se hace con {@code clown.addCow(cow)} y se guarda el
-     * payaso, no la vaca: el lado dueño de la relación es Clown, que es quien
-     * tiene la {@code @JoinTable}. Hacerlo al revés no insertaría nada en
-     * clown_cow.</p>
+     * <p>The assignment is done with {@code clown.addCow(cow)} and the clown is
+     * saved, not the cow: the owner side of the relationship is Clown, who holds
+     * the {@code @JoinTable}. Doing it the other way around would not insert anything
+     * in clown_cow.</p>
      */
     private void assignClowns(Cow cow, List<UUID> clownIds) {
         if (clownIds.isEmpty()) {
@@ -233,8 +233,8 @@ public class CowService {
             Clown clown = clownRepository.findByIdAndActiveTrue(clownId)
                     .orElseThrow(() -> ResourceNotFoundException.of("Clown", clownId));
 
-            // Ignora repetidos dentro de la misma petición en vez de fallar:
-            // el resultado que pidió el cliente igual se cumple.
+            // Ignores duplicates within the same request instead of failing:
+            // the result requested by the client is fulfilled anyway.
             if (!clown.hasCow(cow)) {
                 clown.addCow(cow);
                 clownRepository.save(clown);

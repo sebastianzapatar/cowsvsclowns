@@ -1,11 +1,11 @@
 package com.sebasmalparqueado.cowsvsclown.common.exceptions;
 
 /**
- * El recurso pedido no existe (o está dado de baja). Se traduce a un 404.
+ * The requested resource does not exist (or has been logically deleted). Translates to a 404.
  *
- * <p>Es RuntimeException a propósito: al no ser chequeada no obliga a llenar
- * las firmas de los servicios con {@code throws}, y Spring hace rollback
- * automático de la transacción cuando se lanza.</p>
+ * <p>It is intentionally a RuntimeException: by being unchecked, it does not force filling
+ * service signatures with {@code throws}, and Spring automatically rolls back
+ * the transaction when it is thrown.</p>
  */
 public class ResourceNotFoundException extends RuntimeException {
 
@@ -14,13 +14,13 @@ public class ResourceNotFoundException extends RuntimeException {
     }
 
     /**
-     * Atajo para el mensaje típico: "No existe Cow con id X".
+     * Shortcut for the typical message: "There is no Cow with id X".
      *
-     * @param resource nombre de la entidad, por ejemplo "Cow"
-     * @param id       identificador que se buscó
+     * @param resource entity name, e.g., "Cow"
+     * @param id       identifier that was searched
      */
     public static ResourceNotFoundException of(String resource, Object id) {
         return new ResourceNotFoundException(
-                "No existe %s con id %s".formatted(resource, id));
+                "There is no %s with id %s".formatted(resource, id));
     }
 }

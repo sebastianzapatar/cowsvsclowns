@@ -8,29 +8,29 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Datos para crear un payaso.
+ * Data to create a clown.
  *
- * <p>{@code cowIds} es la inserción <b>N a M</b> desde el lado del payaso: cada
- * id que venga acá se convierte en una fila de la tabla intermedia clown_cow.
- * Las vacas tienen que existir y estar activas.</p>
+ * <p>{@code cowIds} is the <b>N to M</b> insertion from the clown's side: each
+ * id that comes here is converted into a row in the join table clown_cow.
+ * Cows must exist and be active.</p>
  */
-@Schema(description = "Datos para crear un payaso, con las vacas que se le asignan")
+@Schema(description = "Data to create a clown, along with the cows assigned to it")
 public record ClownRequest(
 
-        @NotBlank(message = "el nombre es obligatorio")
-        @Size(min = 2, max = 100, message = "el nombre debe tener entre 2 y 100 caracteres")
-        @Schema(description = "Nombre del payaso (no se puede repetir)", example = "Pennywise")
+        @NotBlank(message = "name is mandatory")
+        @Size(min = 2, max = 100, message = "name must be between 2 and 100 characters")
+        @Schema(description = "Clown's name (must be unique)", example = "Pennywise")
         String name,
 
-        @Size(max = 255, message = "la descripción no puede pasar de 255 caracteres")
-        @Schema(description = "Descripción del payaso", example = "Vive en la alcantarilla")
+        @Size(max = 255, message = "description cannot exceed 255 characters")
+        @Schema(description = "Clown's description", example = "Lives in the sewer")
         String description,
 
-        @Schema(description = "Ids de las vacas que se le asignan (relación N a M). Opcional.")
+        @Schema(description = "Ids of the cows assigned to it (N to M relationship). Optional.")
         List<UUID> cowIds
 ) {
 
-    /** Devuelve los ids de vacas nunca en null, para no chequearlo en el servicio. */
+    /** Returns cow ids, never null, to avoid checking it in the service. */
     public List<UUID> cowIdsOrEmpty() {
         return cowIds == null ? List.of() : cowIds;
     }

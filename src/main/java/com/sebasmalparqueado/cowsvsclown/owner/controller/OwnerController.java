@@ -22,57 +22,57 @@ import java.net.URI;
 import java.util.List;
 
 /**
- * Endpoints de dueños. El dueño es el lado "1" de la relación 1 a N con las
- * vacas, así que desde acá se puede crear un dueño con todas sus vacas de una.
+ * Owner endpoints. The owner is the "1" side of the 1 to N relationship with the
+ * cows, so from here you can create an owner with all their cows at once.
  */
 @RestController
 @RequestMapping("/api/owners")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "Dueños", description = "CRUD de dueños y creación en cascada de sus vacas (1 a N)")
+@Tag(name = "Owners", description = "Owner CRUD and cascading creation of their cows (1 to N)")
 public class OwnerController {
 
     private final OwnerService ownerService;
 
     @GetMapping
     @Operation(
-            summary = "Listar dueños",
-            description = "Devuelve todos los dueños activos con sus vacas activas."
+            summary = "List owners",
+            description = "Returns all active owners with their active cows."
     )
-    @ApiResponse(responseCode = "200", description = "Listado obtenido")
+    @ApiResponse(responseCode = "200", description = "List obtained")
     public ResponseEntity<List<OwnerResponse>> getAllOwners() {
         return ResponseEntity.ok(ownerService.getAll());
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Buscar un dueño por id")
+    @Operation(summary = "Find an owner by id")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Dueño encontrado"),
-            @ApiResponse(responseCode = "404", description = "No existe ese dueño",
+            @ApiResponse(responseCode = "200", description = "Owner found"),
+            @ApiResponse(responseCode = "404", description = "Owner does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<OwnerResponse> getOwnerById(
-            @Parameter(description = "Id del dueño") @PathVariable Long id) {
+            @Parameter(description = "Owner id") @PathVariable Long id) {
 
         return ResponseEntity.ok(ownerService.getById(id));
     }
 
     @PostMapping
     @Operation(
-            summary = "Crear un dueño",
+            summary = "Create an owner",
             description = """
-                    Si la petición trae la lista "cows", esas vacas se crean junto
-                    con el dueño en la misma transacción: es la inserción 1 a N en
-                    cascada. Si no viene, el dueño se crea solo y las vacas se le
-                    agregan después con POST /api/cows.
+                    If the request brings the "cows" list, those cows are created together
+                    with the owner in the same transaction: this is the cascading 1 to N
+                    insertion. If it is not provided, the owner is created alone and the cows are
+                    added later with POST /api/cows.
                     """
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "201", description = "Dueño creado"),
-            @ApiResponse(responseCode = "400", description = "Datos inválidos",
+            @ApiResponse(responseCode = "201", description = "Owner created"),
+            @ApiResponse(responseCode = "400", description = "Invalid data",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
             @ApiResponse(responseCode = "409",
-                    description = "Ya existe ese dueño, o alguna vaca repite un nombre",
+                    description = "Owner already exists, or a cow repeats a name",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<OwnerResponse> createOwner(@Valid @RequestBody OwnerRequest request) {
@@ -85,20 +85,20 @@ public class OwnerController {
 
     @PatchMapping("/{id}")
     @Operation(
-            summary = "Modificar un dueño",
-            description = "Solo cambia los campos que se envían; los que no vengan se dejan igual."
+            summary = "Modify an owner",
+            description = "Only changes the fields that are sent; those not provided are left unchanged."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Dueño actualizado"),
-            @ApiResponse(responseCode = "400", description = "Datos inválidos o petición vacía",
+            @ApiResponse(responseCode = "200", description = "Owner updated"),
+            @ApiResponse(responseCode = "400", description = "Invalid data or empty request",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "404", description = "No existe ese dueño",
+            @ApiResponse(responseCode = "404", description = "Owner does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
-            @ApiResponse(responseCode = "409", description = "Ya hay otro dueño con ese nombre",
+            @ApiResponse(responseCode = "409", description = "There is already another owner with that name",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<OwnerResponse> updateOwner(
-            @Parameter(description = "Id del dueño") @PathVariable Long id,
+            @Parameter(description = "Owner id") @PathVariable Long id,
             @Valid @RequestBody OwnerUpdateRequest request) {
 
         return ResponseEntity.ok(ownerService.update(id, request));
@@ -106,19 +106,19 @@ public class OwnerController {
 
     @DeleteMapping("/{id}")
     @Operation(
-            summary = "Dar de baja un dueño",
-            description = "Baja lógica. Sus vacas también quedan inactivas, porque "
-                    + "la columna owner_id es obligatoria y no pueden quedar sin dueño. "
-                    + "Para conservarlas hay que traspasarlas antes con "
+            summary = "Logically delete an owner",
+            description = "Logical delete. Their cows are also deactivated, because "
+                    + "the owner_id column is mandatory and they cannot be left without an owner. "
+                    + "To keep them they must be transferred beforehand with "
                     + "PATCH /api/cows/{id}/owner/{ownerId}."
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "204", description = "Dueño dado de baja"),
-            @ApiResponse(responseCode = "404", description = "No existe ese dueño",
+            @ApiResponse(responseCode = "204", description = "Owner logically deleted"),
+            @ApiResponse(responseCode = "404", description = "Owner does not exist",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<Void> deleteOwner(
-            @Parameter(description = "Id del dueño") @PathVariable Long id) {
+            @Parameter(description = "Owner id") @PathVariable Long id) {
 
         ownerService.softDelete(id);
         return ResponseEntity.noContent().build();

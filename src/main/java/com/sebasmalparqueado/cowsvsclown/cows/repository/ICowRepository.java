@@ -10,50 +10,50 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Acceso a datos de {@link Cow}.
+ * Data access for {@link Cow}.
  *
- * <p>De {@code JpaRepository} ya se heredan save, findAll, count y compañía.
- * Acá solo se agregan las consultas propias: las que filtran por el borrado
- * lógico y las que traen las relaciones cargadas de una.</p>
+ * <p>From {@code JpaRepository} it already inherits save, findAll, count and so on.
+ * Here we only add custom queries: those that filter by logical delete
+ * and those that fetch relationships eagerly.</p>
  */
 public interface ICowRepository extends JpaRepository<Cow, UUID> {
 
-    /** Una vaca activa por id (el findById heredado también trae las de baja). */
+    /** An active cow by id (the inherited findById also brings deleted ones). */
     Optional<Cow> findByIdAndActiveTrue(UUID id);
 
-    /** Búsqueda por nombre exacto, sin distinguir mayúsculas. */
+    /** Exact search by name, ignoring case. */
     Optional<Cow> findByNameIgnoreCaseAndActiveTrue(String name);
 
     /**
-     * ¿Ya existe una vaca con ese nombre?
+     * Does a cow with that name already exist?
      *
-     * <p>A propósito NO filtra por activo: la columna name tiene un UNIQUE en
-     * la base, y ese índice también cuenta las filas dadas de baja lógicamente.
-     * Si acá se filtrara por activas, el servicio dejaría pasar el nombre y
-     * después reventaría el insert contra la restricción de Postgres.</p>
+     * <p>On purpose it DOES NOT filter by active: the name column has a UNIQUE
+     * constraint in the database, and that index also counts logically deleted rows.
+     * If we filtered by active here, the service would let the name pass and
+     * then the insert would blow up against the Postgres constraint.</p>
      */
     boolean existsByNameIgnoreCase(String name);
 
-    /** Igual que el anterior, excluyendo un id: se usa al actualizar. */
+    /** Same as above, excluding an id: used when updating. */
     boolean existsByNameIgnoreCaseAndIdNot(String name, UUID id);
 
     /**
-     * Vacas activas de un dueño. Es la consulta del lado "N" de la relación
-     * 1 a N: se navega por {@code owner.id} y Spring Data lo traduce a un
-     * WHERE sobre la columna owner_id.
+     * Active cows of an owner. This is the "N" side query of the 1 to N
+     * relationship: we navigate by {@code owner.id} and Spring Data translates
+     * it to a WHERE on the owner_id column.
      */
     List<Cow> findAllByOwnerIdAndActiveTrueOrderByNameAsc(Long ownerId);
 
     /**
-     * Todas las vacas activas con dueño y payasos ya cargados.
+     * All active cows with owner and clowns already loaded.
      *
-     * <p>Los dos JOIN FETCH resuelven el N+1: sin ellos, el mapper pediría el
-     * dueño y los payasos de cada vaca por separado y se dispararían 2N
-     * consultas extra.</p>
+     * <p>The two JOIN FETCH resolve the N+1 problem: without them, the mapper
+     * would ask for the owner and clowns of each cow separately and 2N
+     * extra queries would be triggered.</p>
      *
-     * <p>Solo se puede hacer FETCH de UNA colección tipo lista por consulta: si
-     * se agregara otra, Hibernate falla con MultipleBagFetchException.
-     * {@code owner} no cuenta porque es un @ManyToOne, no una colección.</p>
+     * <p>You can only FETCH ONE list-type collection per query: if
+     * another one was added, Hibernate fails with MultipleBagFetchException.
+     * {@code owner} doesn't count because it's a @ManyToOne, not a collection.</p>
      */
     @Query("""
             SELECT c FROM Cow c
@@ -64,7 +64,7 @@ public interface ICowRepository extends JpaRepository<Cow, UUID> {
             """)
     List<Cow> findAllActiveWithRelations();
 
-    /** Una vaca activa con dueño y payasos ya cargados, en una sola consulta. */
+    /** An active cow with owner and clowns already loaded, in a single query. */
     @Query("""
             SELECT c FROM Cow c
             LEFT JOIN FETCH c.owner
@@ -74,17 +74,17 @@ public interface ICowRepository extends JpaRepository<Cow, UUID> {
     Optional<Cow> findActiveWithRelationsById(@Param("id") UUID id);
 
     /**
-     * La misma búsqueda por nombre pero en SQL nativo, como ejemplo de
+     * The same search by name but in native SQL, as an example of
      * {@code nativeQuery = true}.
      *
-     * <p>Diferencias con JPQL que hay que tener presentes:</p>
+     * <p>Differences with JPQL to keep in mind:</p>
      * <ul>
-     *   <li>Se escriben nombres de TABLA y COLUMNA reales (cows, milkperday),
-     *       no los de la clase Java.</li>
-     *   <li>Va {@code SELECT *} y no {@code SELECT c}: el alias de entidad es
-     *       cosa de JPQL.</li>
-     *   <li>LIMIT es sintaxis de PostgreSQL. Si mañana se cambia de motor, esta
-     *       consulta hay que reescribirla; las JPQL no.</li>
+     *   <li>You write real TABLE and COLUMN names (cows, milkperday),
+     *       not the Java class names.</li>
+     *   <li>It's {@code SELECT *} and not {@code SELECT c}: the entity alias
+     *       is a JPQL thing.</li>
+     *   <li>LIMIT is PostgreSQL syntax. If tomorrow the engine is changed, this
+     *       query must be rewritten; JPQL ones do not.</li>
      * </ul>
      */
     @Query(

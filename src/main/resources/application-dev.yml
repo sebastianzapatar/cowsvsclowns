@@ -1,18 +1,18 @@
 # =============================================================================
-# PERFIL "dev"  ->  se activa con: spring.profiles.active=dev
+# "dev" PROFILE  ->  activated with: spring.profiles.active=dev
 # =============================================================================
-# Para trabajar en tu máquina, con un Postgres local (sin Docker).
-# Es el perfil por defecto: si no decís nada, este es el que se usa.
+# For working on your local machine, with a local Postgres (no Docker).
+# This is the default profile: if you don't specify anything, this one is used.
 #
-# Si preferís levantar solo la base con Docker y correr la app desde el IDE:
+# If you prefer to start only the database with Docker and run the app from the IDE:
 #     docker compose up -d db
-# y dejá este perfil apuntando a localhost con el puerto de tu .env.
+# and leave this profile pointing to localhost with the port from your .env.
 # =============================================================================
 
 spring:
   datasource:
-    # Los valores por defecto (después de los ":") coinciden con .env.template,
-    # así que esto arranca sin configurar nada si seguiste esa plantilla.
+    # Default values (after the ":") match .env.template,
+    # so this starts without configuring anything if you followed that template.
     url: jdbc:postgresql://localhost:${DB_PORT:5432}/${DB_NAME:cowsvsclown_db}
     username: ${DB_USER:postgres}
     password: ${DB_PASSWORD:postgres}
@@ -20,8 +20,8 @@ spring:
 
   jpa:
     hibernate:
-      # "update" ajusta las tablas al arrancar: cómodo mientras se desarrolla.
-      # Nunca en producción, ahí se usan migraciones (Flyway o Liquibase).
+      # "update" adjusts the tables on startup: convenient during development.
+      # Never use in production, use migrations there (Flyway or Liquibase).
       ddl-auto: update
     show-sql: true
     properties:
@@ -31,8 +31,8 @@ spring:
 logging:
   level:
     org.hibernate.SQL: debug
-    # Muestra los valores que van en los "?" de las consultas.
-    # Solo en dev: imprime datos reales en los logs.
+    # Shows the values that go into the "?" in the queries.
+    # Only in dev: prints real data in the logs.
     org.hibernate.orm.jdbc.bind: trace
-    # Los logs propios de la aplicación (los log.info de los servicios).
+    # The application's own logs (e.g. log.info from services).
     com.sebasmalparqueado.cowsvsclown: debug
