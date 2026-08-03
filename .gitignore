@@ -45,3 +45,13 @@ out/
 # (por ejemplo: ./gradlew test > test_output.log). Son temporales y de cada
 # máquina: no tienen por qué viajar en el repositorio.
 *.log
+
+### Copias duplicadas de sincronización ###
+# iCloud Drive, Dropbox y Google Drive resuelven los conflictos de sincronización
+# creando una copia con un número al final ("ClownService 2.java"). Son idénticas
+# al original y no deben viajar en el repositorio: sin esta regla un `git add .`
+# las mete sin que se note.
+* 2
+* 3
+* 2.*
+* 3.*
