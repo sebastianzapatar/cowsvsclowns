@@ -29,7 +29,8 @@ import java.util.List;
 @RequestMapping("/api/owners")
 @RequiredArgsConstructor
 @Slf4j
-@Tag(name = "Owners", description = "Owner CRUD and cascading creation of their cows (1 to N)")
+@Tag(name = "Owners", description = "Owner CRUD and " +
+        "cascading creation of their cows (1 to N)")
 public class OwnerController {
 
     private final OwnerService ownerService;
@@ -37,7 +38,8 @@ public class OwnerController {
     @GetMapping
     @Operation(
             summary = "List owners",
-            description = "Returns all active owners with their active cows."
+            description = "Returns all active " +
+                    "owners with their active cows."
     )
     @ApiResponse(responseCode = "200", description = "List obtained")
     public ResponseEntity<List<OwnerResponse>> getAllOwners() {
@@ -47,9 +49,12 @@ public class OwnerController {
     @GetMapping("/{id}")
     @Operation(summary = "Find an owner by id")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Owner found"),
-            @ApiResponse(responseCode = "404", description = "Owner does not exist",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+            @ApiResponse(responseCode = "200",
+                    description = "Owner found"),
+            @ApiResponse(responseCode = "404",
+                    description = "Owner does not exist",
+                    content =
+                    @Content(schema = @Schema(implementation = ErrorResponse.class)))
     })
     public ResponseEntity<OwnerResponse> getOwnerById(
             @Parameter(description = "Owner id") @PathVariable Long id) {
