@@ -57,7 +57,7 @@ public class ClownController {
     })
     public ResponseEntity<ClownResponse> getClownById(
             @Parameter(description = "Clown id") @PathVariable UUID id) {
-
+        IO.println("PRUEBITA");
         return ResponseEntity.ok(clownService.getById(id));
     }
 

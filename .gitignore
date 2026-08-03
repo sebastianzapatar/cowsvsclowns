@@ -36,3 +36,12 @@ out/
 
 ### VS Code ###
 .vscode/
+
+### macOS ###
+.DS_Store
+
+### Logs ###
+# Salidas de consola que a veces se redirigen a un archivo al depurar
+# (por ejemplo: ./gradlew test > test_output.log). Son temporales y de cada
+# máquina: no tienen por qué viajar en el repositorio.
+*.log
