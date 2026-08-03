@@ -25,8 +25,9 @@ las filas de `clown_cow`, que solo representan un vínculo.
 7. [Modelo de datos](#modelo-de-datos)
 8. [Manejo de errores](#manejo-de-errores)
 9. [Tests y cobertura](#tests-y-cobertura)
-10. [Estructura del proyecto](#estructura-del-proyecto)
-11. [Comandos de referencia](#comandos-de-referencia)
+10. [CI/CD](#cicd)
+11. [Estructura del proyecto](#estructura-del-proyecto)
+12. [Comandos de referencia](#comandos-de-referencia)
 
 ---
 
@@ -380,6 +381,136 @@ porcentaje estaría mintiendo.
 
 Los tests usan H2 en memoria con `create-drop`, así que cada corrida arranca con
 tablas limpias y no dependen de que haya un Postgres levantado.
+
+---
+
+## CI/CD
+
+La cadena completa es esta:
+
+```
+git push a main
+      │
+      ▼
+GitHub Actions  →  compila, corre las 195 pruebas, verifica cobertura
+      │
+      ├── rojo  →  Render NO despliega. Producción sigue con la versión anterior.
+      │
+      └── verde →  Render construye la imagen y despliega
+```
+
+### Los dos workflows
+
+| Archivo | Cuándo corre | Para qué |
+|---|---|---|
+| `ci.yml` | Push a `main` y PRs | El gate: decide si el código pasa |
+| `reportes.yml` | Solo a mano | Descargar los HTML de pruebas y cobertura |
+
+Están separados a propósito. `ci.yml` corre en cada push, así que hace una sola
+cosa y la hace rápido. Guardar los reportes en cada ejecución sumaría tiempo y
+llenaría la cuota de almacenamiento del repositorio, y casi nunca se descargan.
+
+### `ci.yml` — el gate
+
+Un solo trabajo en cuatro pasos comentados uno por uno: descargar el código,
+instalar Java 25, dar permiso a `gradlew` y correr `./gradlew build`.
+
+Se dispara en dos momentos:
+
+| Evento | Para qué |
+|---|---|
+| Push a `main` | Es lo que Render mira para decidir si despliega |
+| Pull Request hacia `main` | Ver si el cambio rompe algo **antes** de mezclarlo |
+
+El paso que decide todo es `./gradlew build`, porque hace las tres cosas de una:
+compila, corre las pruebas y ejecuta el gate de cobertura. Si cualquiera falla,
+Gradle devuelve un código de error y el workflow queda en rojo. No hay más
+lógica que esa.
+
+Las pruebas usan H2 en memoria, así que en CI **no hace falta** levantar un
+Postgres ni configurar variables de base de datos.
+
+### Qué se ve al terminar
+
+El check aparece en verde o en rojo sobre el commit y sobre el PR. Si algo
+falló, el detalle de qué prueba fue está en el log del paso *Compilar y correr
+las pruebas*.
+
+### `reportes.yml` — cuando el resumen no alcanza
+
+Para ver **qué línea** quedó sin cubrir, o el detalle completo de una prueba que
+falló, hay que abrir los HTML. Ese workflow no se ejecuta solo:
+
+**Actions → Reportes (en la lista de la izquierda) → Run workflow**
+
+Se puede elegir la rama, así que sirve para revisar una rama de trabajo y no
+solo `main`. Al terminar, los reportes quedan en la sección **Artifacts** al pie
+de la página del run: se descarga un `.zip` y adentro se abre el `index.html` de
+cada carpeta con el navegador.
+
+Corre `./gradlew test` con `continue-on-error`, así que **sube los reportes
+aunque las pruebas fallen** — que es cuando más se necesitan.
+
+### Hacer que las pruebas sean obligatorias
+
+El workflow por sí solo **marca** el rojo, pero no impide mezclar un PR roto.
+Para que sea obligatorio hay que activarlo en GitHub una sola vez:
+
+**Settings → Branches → Add branch protection rule**
+
+1. En *Branch name pattern*: `main`
+2. Marcar **Require status checks to pass before merging**
+3. Buscar y seleccionar el check **`Pruebas y cobertura`**
+4. Guardar
+
+Ese nombre sale del campo `name:` del job en `ci.yml`. Si lo cambias ahí, hay
+que actualizar también esta regla o dejará de aplicar.
+
+### Configurar Render
+
+Render se conecta al repositorio y espera a que GitHub Actions termine en verde.
+
+**1. Crear la base de datos**
+
+En Render: **New → Postgres**. Al crearla, guarda los datos de la sección
+*Connections*.
+
+**2. Crear el servicio web**
+
+**New → Web Service**, conecta el repositorio. Render detecta el `Dockerfile`
+solo y elige *Runtime: Docker*.
+
+**3. Activar la espera por CI**
+
+En **Settings → Build & Deploy → Auto-Deploy**, elegir:
+
+```
+After CI Checks Pass
+```
+
+Esta es la línea que conecta las dos mitades. Con la opción por defecto (*On
+Commit*), Render desplegaría apenas llega el push, sin esperar a las pruebas.
+
+**4. Variables de entorno**
+
+En **Environment**, agregar:
+
+| Variable | Valor |
+|---|---|
+| `SPRING_PROFILES_ACTIVE` | `docker` |
+| `DB_URL` | `jdbc:postgresql://HOST/BASE` |
+| `DB_USERNAME` | El usuario de la base de Render |
+| `DB_PASSWORD` | La contraseña de la base de Render |
+| `DDL_AUTO` | `update` |
+
+> **El error más común aquí:** Render entrega la URL de la base en formato
+> `postgresql://usuario:clave@host/base`, y Spring **no** la entiende así.
+> Hay que reescribirla como `jdbc:postgresql://host/base` (con el prefijo
+> `jdbc:` y **sin** el usuario ni la contraseña adentro) y pasar esas dos
+> credenciales por separado en `DB_USERNAME` y `DB_PASSWORD`.
+
+No hay que configurar el puerto: `application.yml` lee `${PORT:8080}`, así que
+usa el que Render asigne y el 8080 de siempre en local.
 
 ---
 

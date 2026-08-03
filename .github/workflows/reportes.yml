@@ -1,0 +1,97 @@
+# =============================================================================
+# Reportes — descargar los HTML de pruebas y cobertura
+# =============================================================================
+# Qué hace: corre las pruebas y deja los reportes HTML como archivo descargable.
+#
+# Por qué está separado de ci.yml: guardar los reportes en CADA push y CADA PR
+# suma tiempo y llena la cuota de almacenamiento del repositorio, y casi nunca
+# se descargan. ci.yml solo responde una pregunta —¿pasa o no pasa?— y el
+# detalle de qué prueba falló ya sale en su log.
+#
+# Este es para cuando eso no alcanza: querés ver QUÉ línea quedó sin cubrir, o
+# navegar el reporte de JaCoCo hasta el código fuente.
+#
+# Cómo se lanza: NO se ejecuta solo. Hay que ir a la pestaña "Actions" del
+# repositorio, elegir "Reportes" en la lista de la izquierda, y hacer clic en
+# el botón "Run workflow".
+# =============================================================================
+
+name: Reportes
+
+# ============================ CUÁNDO SE EJECUTA ==============================
+# workflow_dispatch = solo a mano, desde el botón. No hay push ni pull_request
+# a propósito: si se ejecutara solo, volveríamos al problema que queríamos
+# evitar.
+on:
+  workflow_dispatch:
+    # Permite elegir la rama al lanzarlo desde el botón, para poder generar los
+    # reportes de una rama de trabajo y no solo de main.
+    inputs:
+      rama:
+        description: 'Rama de la que generar los reportes'
+        required: false
+        default: 'main'
+
+permissions:
+  contents: read
+
+jobs:
+  reportes:
+    name: Generar reportes
+    runs-on: ubuntu-latest
+
+    steps:
+      # ---------------------------------------------------------------------
+      # 1) Traer el código de la rama elegida
+      # ---------------------------------------------------------------------
+      - name: Descargar el código
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.rama }}
+
+      # ---------------------------------------------------------------------
+      # 2) Instalar Java 25
+      # ---------------------------------------------------------------------
+      # Igual que en ci.yml: la 25 es la que fija el toolchain en build.gradle.
+      - name: Instalar Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+
+      - name: Dar permiso de ejecución a gradlew
+        run: chmod +x gradlew
+
+      # ---------------------------------------------------------------------
+      # 3) Correr las pruebas para que se generen los reportes
+      # ---------------------------------------------------------------------
+      # Se usa "test" y no "build" a propósito: acá no interesa empaquetar el
+      # jar ni frenar por el gate de cobertura, solo producir los HTML.
+      #
+      # continue-on-error: true es lo que hace útil a este workflow. Si las
+      # pruebas fallan, el paso NO corta la ejecución y se sigue al de abajo,
+      # que sube los reportes. Justamente cuando algo falla es cuando querés
+      # descargarlos.
+      - name: Correr las pruebas
+        run: ./gradlew test --no-daemon
+        continue-on-error: true
+
+      # ---------------------------------------------------------------------
+      # 4) Dejar los reportes como archivo descargable
+      # ---------------------------------------------------------------------
+      # Aparecen al final de la página del run, en la sección "Artifacts".
+      # Se descarga un .zip; adentro hay que abrir el index.html de cada
+      # carpeta con el navegador.
+      - name: Guardar los reportes
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes-de-pruebas
+          path: |
+            build/reports/tests/test/
+            build/reports/jacoco/test/html/
+          # Se borran solos a los 7 días para no llenar la cuota del repo.
+          retention-days: 7
+          # Si por algún motivo no se generó ningún reporte, avisa en vez de
+          # terminar en verde con un artefacto vacío.
+          if-no-files-found: error

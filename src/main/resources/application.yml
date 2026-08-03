@@ -20,6 +20,14 @@ spring:
     # que "validationErrors" solo aparezca en los errores de validación.
     default-property-inclusion: non_null
 
+# ================================= Servidor ==================================
+# En local y en Docker no hay variable PORT, así que se usa el 8080 de siempre.
+# Render (y casi cualquier PaaS) asigna un puerto propio en la variable PORT y
+# espera que la app escuche ahí; si no, el despliegue queda "unhealthy" aunque
+# la app haya arrancado bien.
+server:
+  port: ${PORT:8080}
+
 # ============================= Swagger / OpenAPI =============================
 # Con springdoc no hay que escribir nada del contrato a mano: lo arma leyendo
 # los controllers y los DTO. Acá solo se configura dónde queda publicado.

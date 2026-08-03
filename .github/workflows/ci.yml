@@ -1,0 +1,103 @@
+# =============================================================================
+# CI — Integración Continua
+# =============================================================================
+# Qué hace: cada vez que alguien sube código a main o abre un Pull Request,
+# GitHub levanta una máquina Linux limpia, compila el proyecto y corre las 195
+# pruebas. Si alguna falla, el commit queda marcado en rojo.
+#
+# Por qué importa: Render está configurado en "After CI Checks Pass", así que
+# solo despliega si este workflow terminó en verde. Si las pruebas fallan,
+# el código roto NO llega a producción.
+#
+# Dónde se ve el resultado: pestaña "Actions" del repositorio en GitHub.
+# El detalle de qué prueba falló aparece en el log del paso "Compilar y correr
+# las pruebas"; para ver los reportes HTML está el workflow "reportes.yml",
+# que se lanza a mano.
+# =============================================================================
+
+name: CI
+
+# ============================ CUÁNDO SE EJECUTA ==============================
+on:
+  # Al subir commits a main: esto es lo que Render mira para decidir si despliega.
+  push:
+    branches: [main]
+
+  # Al abrir o actualizar un PR hacia main: así se ve si el cambio rompe algo
+  # ANTES de mezclarlo, no después.
+  pull_request:
+    branches: [main]
+
+# Si empujás dos commits seguidos, cancela el run anterior y deja solo el
+# último. Ahorra minutos de GitHub Actions y evita ver resultados de código
+# que ya quedó viejo.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Este workflow solo necesita leer el código. Darle los permisos mínimos es
+# buena práctica: si algún día una dependencia hiciera algo raro, no puede
+# escribir en el repositorio.
+permissions:
+  contents: read
+
+jobs:
+  pruebas:
+    # Este nombre es el que aparece en GitHub y el que hay que marcar como
+    # "required" en la protección de rama. Si lo cambiás, actualizá también
+    # esa configuración o la regla dejará de aplicar.
+    name: Pruebas y cobertura
+    runs-on: ubuntu-latest
+
+    steps:
+      # ---------------------------------------------------------------------
+      # 1) Traer el código al runner
+      # ---------------------------------------------------------------------
+      # La máquina arranca vacía: sin este paso no hay nada que compilar.
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      # ---------------------------------------------------------------------
+      # 2) Instalar Java 25
+      # ---------------------------------------------------------------------
+      # Tiene que ser la 25 porque es la que fija el toolchain en build.gradle.
+      # Con una versión menor, Gradle intentaría descargarla o fallaría.
+      #
+      # cache: gradle guarda las dependencias descargadas entre ejecuciones.
+      # La primera corrida baja Spring Boot entero (~1-2 min); las siguientes
+      # lo reutilizan y tardan bastante menos.
+      - name: Instalar Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: gradle
+
+      # ---------------------------------------------------------------------
+      # 3) Permiso de ejecución al wrapper
+      # ---------------------------------------------------------------------
+      # En este repo gradlew ya viene con el permiso puesto, pero si alguien
+      # clona y commitea desde Windows se puede perder. Esta línea es un
+      # seguro barato contra el clásico "Permission denied" en CI.
+      - name: Dar permiso de ejecución a gradlew
+        run: chmod +x gradlew
+
+      # ---------------------------------------------------------------------
+      # 4) Compilar + probar + verificar cobertura   <-- EL ÚNICO PASO QUE DECIDE
+      # ---------------------------------------------------------------------
+      # "build" hace las tres cosas de una:
+      #   - compila el código principal y el de pruebas
+      #   - corre las 195 pruebas (unitarias, de integración y end to end)
+      #   - ejecuta jacocoTestCoverageVerification (el gate de cobertura)
+      #
+      # Si cualquiera de las tres falla, Gradle devuelve un código de error, el
+      # paso se marca en rojo y el workflow entero falla. Eso es exactamente lo
+      # que frena el despliegue en Render: no hace falta nada más.
+      #
+      # Las pruebas usan H2 en memoria (perfil "test"), así que NO hace falta
+      # levantar un Postgres acá ni configurar variables de base de datos.
+      #
+      # --no-daemon: el runner se destruye al terminar, así que un demonio de
+      # Gradle esperando más trabajo no sirve de nada y solo gasta memoria.
+      - name: Compilar y correr las pruebas
+        run: ./gradlew build --no-daemon
