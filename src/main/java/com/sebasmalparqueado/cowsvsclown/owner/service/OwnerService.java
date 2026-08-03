@@ -59,7 +59,9 @@ public class OwnerService {
     @Transactional(readOnly = true)
     public OwnerResponse getById(Long id) {
         Owner owner = ownerRepository.findActiveWithCowsById(id)
-                .orElseThrow(() -> ResourceNotFoundException.of("Owner", id));
+                .orElseThrow(() ->
+                        ResourceNotFoundException.of
+                                ("Owner", id));
         return OwnerMapper.toResponse(owner);
     }
 
@@ -82,7 +84,8 @@ public class OwnerService {
         Owner owner = OwnerMapper.toEntity(request);
         Owner saved = ownerRepository.save(owner);
 
-        log.info("Owner created id={} with {} cow(s)", saved.getId(), saved.getCows().size());
+        log.info("Owner created id={} with {} cow(s)",
+                saved.getId(), saved.getCows().size());
         return OwnerMapper.toResponse(saved);
     }
 
@@ -93,7 +96,8 @@ public class OwnerService {
     @Transactional
     public OwnerResponse update(Long id, OwnerUpdateRequest request) {
         Owner owner = ownerRepository.findActiveWithCowsById(id)
-                .orElseThrow(() -> ResourceNotFoundException.of("Owner", id));
+                .orElseThrow(() ->
+                        ResourceNotFoundException.of("Owner", id));
 
         // The full name is calculated to validate the duplicate
         // against the new values, not against the ones the entity still has.
