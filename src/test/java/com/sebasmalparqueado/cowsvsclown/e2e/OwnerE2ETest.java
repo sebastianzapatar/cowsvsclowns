@@ -111,14 +111,20 @@ class OwnerE2ETest {
         assertTrue(response.getBody().cows().isEmpty());
     }
 
+    /**
+     * The duplicate rule proven against a real database. The service test shows
+     * the check is made; this shows the first insert genuinely committed, since
+     * otherwise the second request would find nothing to collide with.
+     */
     @Test
     @Order(3)
     @DisplayName("POST /api/owners — 409: duplicate owner")
     void createOwner_duplicate_returns409() {
         OwnerRequest request = new OwnerRequest("Sebastián", "Zapata", null);
-        // First creation
+        // First creation: this one has to succeed and persist.
         rest.postForEntity(BASE_URL, request, OwnerResponse.class);
-        // Second: should give 409
+        // Same name and last name again. Deserialised as ErrorResponse because
+        // that is the shape every API error comes back in.
         ResponseEntity<ErrorResponse> response = rest.postForEntity(
                 BASE_URL, request, ErrorResponse.class);
 
@@ -147,6 +153,10 @@ class OwnerE2ETest {
         rest.postForEntity(BASE_URL,
                 new OwnerRequest("Sebastián", "Zapata", null), OwnerResponse.class);
 
+        // exchange() with a ParameterizedTypeReference instead of getForEntity:
+        // generics are erased at runtime, so List<OwnerResponse>.class does not
+        // exist. Without the reference Jackson would hand back a List of
+        // LinkedHashMap and the cast would blow up at the first field access.
         ResponseEntity<List<OwnerResponse>> response = rest.exchange(
                 BASE_URL, HttpMethod.GET, null,
                 new ParameterizedTypeReference<>() {});
@@ -181,6 +191,11 @@ class OwnerE2ETest {
 
     // ============================== PATCH ================================
 
+    /**
+     * PATCH semantics over the wire: only the first name is sent and the last
+     * name has to survive. The service test asserts the same thing in memory —
+     * here it is proven after a real round trip and a real UPDATE.
+     */
     @Test
     @Order(8)
     @DisplayName("PATCH /api/owners/{id} — 200: updates name")
@@ -189,6 +204,8 @@ class OwnerE2ETest {
                 new OwnerRequest("Sebastián", "Zapata", null), OwnerResponse.class).getBody();
 
         OwnerUpdateRequest update = new OwnerUpdateRequest("Juan", null);
+        // exchange() with an explicit HttpEntity: RestTemplate has no
+        // patchForObject, and PATCH needs the body wrapped by hand.
         HttpEntity<OwnerUpdateRequest> entity = new HttpEntity<>(update);
 
         ResponseEntity<OwnerResponse> response = rest.exchange(
@@ -202,6 +219,12 @@ class OwnerE2ETest {
 
     // ============================== DELETE ================================
 
+    /**
+     * The one test that shows what a soft delete actually means from outside:
+     * the row is still in the table, but the API answers 404 for it. Deleting and
+     * then re-reading in the same test is the only way to see that — a unit test
+     * can check the flag flipped, not that the finders stop returning it.
+     */
     @Test
     @Order(9)
     @DisplayName("DELETE /api/owners/{id} — 204: logical delete")
@@ -214,7 +237,10 @@ class OwnerE2ETest {
 
         assertEquals(HttpStatus.NO_CONTENT, response.getStatusCode());
 
-        // Verify that it no longer appears
+        // The half that matters: after the delete the owner is gone as far as
+        // the API is concerned. The row survives with active = false, but every
+        // finder filters it out, so from outside it is indistinguishable from
+        // one that never existed.
         ResponseEntity<ErrorResponse> getResponse = rest.getForEntity(
                 BASE_URL + "/" + created.id(), ErrorResponse.class);
         assertEquals(HttpStatus.NOT_FOUND, getResponse.getStatusCode());

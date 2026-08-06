@@ -295,38 +295,91 @@ El texto de Postgres expone nombres de tablas y constraints, y una
 
 ## Tests y cobertura
 
-**195 tests** en 20 archivos, con **95% de cobertura de instrucciones** y **87%
-de ramas**.
+**196 tests** en 20 archivos, todos en verde.
+
+| Tipo | Tests | Archivos | Qué prueban |
+|---|---:|---:|---|
+| Unitarias | 108 | 9 | Servicios, mappers y excepciones, sin Spring |
+| Integración | 57 | 7 | Controllers con MockMvc y repositorios con H2 |
+| End to end | 30 | 3 | La app completa por HTTP real |
+| Contexto | 1 | 1 | Que todos los beans se puedan construir |
+
+Cobertura: **98.7% de líneas**, 95.8% de instrucciones, 87.5% de ramas, 100% de
+clases.
 
 ### Correr los tests
 
 ```bash
-./gradlew test                 # tests + genera los reportes
-./gradlew cobertura            # lo mismo, e imprime dónde quedaron
+./gradlew test                 # todos + genera los reportes
+```
+
+O solo una familia, que es lo útil mientras trabajas:
+
+```bash
+./gradlew pruebasUnitarias     # 108 tests, menos de 1s
+./gradlew pruebasIntegracion   # 57 tests, ~1s
+./gradlew pruebasE2E           # 30 tests, ~2s (levantan la app entera)
+```
+
+La clasificación sale del nombre de la clase, que es la convención que ya seguía
+el proyecto: `*E2ETest`, `*IntegrationTest`, y el resto son unitarias. Una clase
+nueva entra sola en su grupo sin tocar el `build.gradle`.
+
+> Las tres tareas por tipo **no** generan reporte de cobertura, a propósito: el
+> porcentaje solo tiene sentido con la suite completa. Una clase cubierta por las
+> e2e aparecería como no cubierta al correr solo las unitarias. Para cobertura,
+> `./gradlew test`.
+
+Y para un subconjunto arbitrario:
+
+```bash
+./gradlew test --tests "*ServiceTest"
+./gradlew test --tests "com.sebasmalparqueado.cowsvsclown.common.exceptions.*"
+```
+
+### Reportes
+
+Hay dos formas de verlos.
+
+**1. Los que están versionados en el repositorio** (`docs/reportes/`). Se abren
+sin clonar ni compilar nada:
+
+| Reporte | Ruta |
+|---|---|
+| Resultado de las pruebas | `docs/reportes/pruebas/index.html` |
+| Cobertura | `docs/reportes/cobertura/index.html` |
+
+Son una **foto** del momento en que se corrieron, no se actualizan solos. Después
+de tocar código hay que regenerarlos:
+
+```bash
+./gradlew publicarReportes
+```
+
+Esa tarea corre las pruebas, genera los HTML y los copia a `docs/reportes/`.
+Borra el contenido anterior antes de copiar, porque los nombres de las páginas de
+JaCoCo dependen de las clases y al renombrar una quedarían archivos huérfanos.
+
+**2. Los que genera Gradle en cada corrida** (siempre frescos, en `build/`, que
+no va al repositorio):
+
+| Reporte | Ruta |
+|---|---|
+| Resultado de las pruebas | `build/reports/tests/test/index.html` |
+| Cobertura | `build/reports/jacoco/test/html/index.html` |
+| Cobertura en XML (para CI/SonarQube) | `build/reports/jacoco/test/jacocoTestReport.xml` |
+
+```bash
+./gradlew cobertura            # corre las pruebas e imprime dónde quedaron
 ./gradlew coberturaAbrir       # lo mismo, y los abre en el navegador
 ```
 
 `coberturaAbrir` detecta el sistema operativo y usa `open` (Mac), `xdg-open`
 (Linux) o `explorer` (Windows), así que funciona igual para todo el equipo.
 
-Los reportes se generan siempre, incluso si solo corres `./gradlew test`:
-
-| Reporte | Ruta |
-|---|---|
-| Resultado de los tests | `build/reports/tests/test/index.html` |
-| Cobertura | `build/reports/jacoco/test/html/index.html` |
-| Cobertura en XML (para CI/SonarQube) | `build/reports/jacoco/test/jacocoTestReport.xml` |
-
 En la página de JaCoCo puedes navegar hasta el código fuente y ver línea por
 línea: **verde** = cubierta, **amarillo** = rama parcialmente cubierta, **rojo**
 = sin cubrir.
-
-Para correr un subconjunto:
-
-```bash
-./gradlew test --tests "*ServiceTest"
-./gradlew test --tests "com.sebasmalparqueado.cowsvsclown.common.exceptions.*"
-```
 
 ### El gate de cobertura
 
@@ -361,26 +414,55 @@ porcentaje estaría mintiendo.
 | Integración de repositorio | `@DataJpaTest` + H2 | Las queries JPQL y nativas |
 | End to end | `@SpringBootTest(RANDOM_PORT)` + H2 | Un flujo real por HTTP, de punta a punta |
 
-### Desglose
+Por qué los de controller cuentan como integración aunque el servicio esté
+mockeado: la petición atraviesa el stack real de Spring MVC (ruteo, binding del
+JSON, `@Valid`, `GlobalExceptionHandler`, serialización de la respuesta). Eso es
+justo la parte que un test unitario de la clase controller se saltaría.
 
-| Archivo | Tests |
-|---|---|
-| `GlobalExceptionHandlerTest` | 22 |
-| `CowServiceTest` | 16 |
-| `GlobalExceptionHandlerIntegrationTest` | 14 |
-| `ClownServiceTest` / `OwnerServiceTest` | 13 c/u |
-| `ClownE2ETest` | 11 |
-| `ClownControllerIntegrationTest` / `CowMapperTest` / `CowE2ETest` | 10 c/u |
-| `CowControllerIntegrationTest` / `ErrorResponseTest` / `OwnerE2ETest` | 9 c/u |
-| `BusinessExceptionsTest` | 9 |
-| `OwnerMapperTest` | 8 |
-| `ClownMapperTest` / `OwnerControllerIntegrationTest` | 7 c/u |
-| `CowRepositoryIntegrationTest` / `OwnerRepositoryIntegrationTest` | 6 c/u |
-| `ClownRepositoryIntegrationTest` | 5 |
-| `CowsvsclownApplicationTests` | 1 |
+### Desglose por archivo
+
+| Archivo | Tipo | Tests |
+|---|---|---:|
+| `GlobalExceptionHandlerTest` | Unitario | 22 |
+| `CowServiceTest` | Unitario | 16 |
+| `GlobalExceptionHandlerIntegrationTest` | Integración | 14 |
+| `OwnerServiceTest` | Unitario | 14 |
+| `ClownServiceTest` | Unitario | 13 |
+| `ClownE2ETest` | E2E | 11 |
+| `ClownControllerIntegrationTest` | Integración | 10 |
+| `CowMapperTest` | Unitario | 10 |
+| `CowE2ETest` | E2E | 10 |
+| `CowControllerIntegrationTest` | Integración | 9 |
+| `ErrorResponseTest` | Unitario | 9 |
+| `OwnerE2ETest` | E2E | 9 |
+| `BusinessExceptionsTest` | Unitario | 9 |
+| `OwnerMapperTest` | Unitario | 8 |
+| `ClownMapperTest` | Unitario | 7 |
+| `OwnerControllerIntegrationTest` | Integración | 7 |
+| `CowRepositoryIntegrationTest` | Integración | 6 |
+| `OwnerRepositoryIntegrationTest` | Integración | 6 |
+| `ClownRepositoryIntegrationTest` | Integración | 5 |
+| `CowsvsclownApplicationTests` | Contexto | 1 |
 
 Los tests usan H2 en memoria con `create-drop`, así que cada corrida arranca con
 tablas limpias y no dependen de que haya un Postgres levantado.
+
+### Un detalle que vale la pena saber
+
+Los tests de repositorio y los e2e limpian el estado de formas distintas, y no es
+un descuido:
+
+* Los `@DataJpaTest` corren cada método dentro de una transacción que se
+  **revierte** al terminar. Por eso no se pisan entre sí.
+* Los e2e escriben de verdad: la petición viaja por HTTP y la transacción
+  **confirma**. No hay rollback posible, así que usan
+  `@DirtiesContext(AFTER_EACH_TEST_METHOD)` para reconstruir el contexto entre
+  métodos. Sin eso, cada test heredaría las filas del anterior y las validaciones
+  de duplicados empezarían a fallar según el orden de ejecución.
+
+Es también la razón de que los e2e sean los lentos: reconstruir el contexto
+cuesta. Por eso hay 30 y no 200 — cubren el camino feliz y los errores que vale
+la pena ver de punta a punta, y los casos exhaustivos viven en las unitarias.
 
 ---
 
@@ -392,7 +474,7 @@ La cadena completa es esta:
 git push a main
       │
       ▼
-GitHub Actions  →  compila, corre las 195 pruebas, verifica cobertura
+GitHub Actions  →  compila, corre las 196 pruebas, verifica cobertura
       │
       ├── rojo  →  Render NO despliega. Producción sigue con la versión anterior.
       │
@@ -574,9 +656,13 @@ docker compose down -v        # apaga y borra el volumen
 ```bash
 ./gradlew bootRun                    # corre la app (perfil dev)
 ./gradlew build                      # compila, testea y verifica cobertura
-./gradlew test                       # solo tests (+ reportes)
+./gradlew test                       # todos los tests (+ reportes)
+./gradlew pruebasUnitarias           # solo unitarias (108)
+./gradlew pruebasIntegracion         # solo integración (57)
+./gradlew pruebasE2E                 # solo end to end (30)
 ./gradlew cobertura                  # tests + reportes, imprime las rutas
 ./gradlew coberturaAbrir             # tests + reportes + los abre
+./gradlew publicarReportes           # copia los reportes a docs/reportes/
 ./gradlew jacocoTestCoverageVerification   # solo el gate de cobertura
 ./gradlew clean                      # borra build/
 ./gradlew tasks --group verification # lista las tareas de verificación

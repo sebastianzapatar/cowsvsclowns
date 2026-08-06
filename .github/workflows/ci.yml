@@ -2,7 +2,7 @@
 # CI — Integración Continua
 # =============================================================================
 # Qué hace: cada vez que alguien sube código a main o abre un Pull Request,
-# GitHub levanta una máquina Linux limpia, compila el proyecto y corre las 195
+# GitHub levanta una máquina Linux limpia, compila el proyecto y corre las 196
 # pruebas. Si alguna falla, el commit queda marcado en rojo.
 #
 # Por qué importa: Render está configurado en "After CI Checks Pass", así que
@@ -87,7 +87,7 @@ jobs:
       # ---------------------------------------------------------------------
       # "build" hace las tres cosas de una:
       #   - compila el código principal y el de pruebas
-      #   - corre las 195 pruebas (unitarias, de integración y end to end)
+      #   - corre las 196 pruebas (unitarias, de integración y end to end)
       #   - ejecuta jacocoTestCoverageVerification (el gate de cobertura)
       #
       # Si cualquiera de las tres falla, Gradle devuelve un código de error, el
