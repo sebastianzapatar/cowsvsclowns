@@ -27,7 +27,27 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Controller integration tests for {@link ClownController}.
- * Uses @WebMvcTest to test the web layer in isolation.
+ * Uses {@code @WebMvcTest} to test the web layer in isolation.
+ *
+ * <p>Same shape as the other two controller tests — the real Spring MVC stack
+ * with the service mocked, asserting the HTTP contract rather than business
+ * rules. What is specific to this one is the pair of endpoints that manage the
+ * N to M link:</p>
+ *
+ * <pre>
+ *   POST   /api/clowns/{clownId}/cows/{cowId}   assign
+ *   DELETE /api/clowns/{clownId}/cows/{cowId}   unassign
+ * </pre>
+ *
+ * <p>They live under {@code /api/clowns} and not {@code /api/cows} because
+ * {@code Clown} is the owning side of the relationship. And they are modelled as
+ * a sub-resource rather than a field in the PATCH body because a link is not a
+ * property of the clown: it is something that gets created and deleted, which is
+ * exactly what POST and DELETE mean.</p>
+ *
+ * <p>Note the status codes they return, asserted below: assigning answers
+ * <b>200 with the updated clown</b>, not 201 — no new addressable resource is
+ * born, since there is no URL for a single link.</p>
  */
 @WebMvcTest(ClownController.class)
 @ActiveProfiles("test")
@@ -38,6 +58,7 @@ class ClownControllerIntegrationTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /** Replaces the real service: this slice has no database behind it. */
     @MockitoBean
     private ClownService clownService;
 
@@ -93,6 +114,11 @@ class ClownControllerIntegrationTest {
         }
     }
 
+    /**
+     * Reads the N to M from the cow's end. It hangs off {@code /api/clowns}
+     * because what comes back is a list of clowns — the route reflects the shape
+     * of the answer, not the id in the path.
+     */
     @Nested
     @DisplayName("GET /api/clowns/cow/{cowId}")
     class GetClownsByCow {
@@ -136,9 +162,15 @@ class ClownControllerIntegrationTest {
                     .andExpect(jsonPath("$.name").value("Bozo"));
         }
 
+        /**
+         * Rejected by {@code @Valid} before the controller body runs, so the
+         * service is never reached.
+         */
         @Test
         @DisplayName("returns 400 Bad Request if missing fields")
         void returnsBadRequest() throws Exception {
+            // Blank strings rather than nulls: @NotBlank rejects both, and blanks
+            // are what a form actually submits.
             ClownRequest request = new ClownRequest("", "", List.of());
 
             mockMvc.perform(post("/api/clowns")
@@ -172,6 +204,12 @@ class ClownControllerIntegrationTest {
         }
     }
 
+    /**
+     * Creating the N to M link. POST because a link is brought into existence,
+     * but <b>200 and not 201</b>: 201 promises a Location header pointing at the
+     * new resource, and a single link has no URL of its own. What comes back is
+     * the updated clown.
+     */
     @Nested
     @DisplayName("POST /api/clowns/{id}/cows/{cowId}")
     class AddCowToClown {
@@ -186,6 +224,8 @@ class ClownControllerIntegrationTest {
 
             when(clownService.assignCow(id, cowId)).thenReturn(response);
 
+            // No body: both ids are in the path, which together name the link
+            // being created.
             mockMvc.perform(post("/api/clowns/{id}/cows/{cowId}", id, cowId)
                             .contentType(MediaType.APPLICATION_JSON))
                     .andExpect(status().isOk());
@@ -194,6 +234,15 @@ class ClownControllerIntegrationTest {
 
     // ============================== DELETE ===============================
 
+    /**
+     * Destroying the link — and the one DELETE in the project that really
+     * deletes: the {@code clown_cow} row is removed rather than flagged.
+     *
+     * <p>It answers <b>200 with the updated clown</b>, not the 204 that
+     * {@code DELETE /api/clowns/{id}} returns. The difference is deliberate:
+     * deleting the clown leaves nothing to talk about, while unassigning a cow
+     * leaves a clown whose new state the caller usually wants to see.</p>
+     */
     @Nested
     @DisplayName("DELETE /api/clowns/{id}/cows/{cowId}")
     class RemoveCowFromClown {

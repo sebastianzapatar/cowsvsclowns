@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClownController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.clowns.controller</a> &gt; <span class="el_source">ClownController.java</span></div><h1>ClownController.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.clowns.controller;
+
+import com.sebasmalparqueado.cowsvsclown.clowns.dto.ClownRequest;
+import com.sebasmalparqueado.cowsvsclown.clowns.dto.ClownResponse;
+import com.sebasmalparqueado.cowsvsclown.clowns.dto.ClownUpdateRequest;
+import com.sebasmalparqueado.cowsvsclown.clowns.service.ClownService;
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.ErrorResponse;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.net.URI;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Clown endpoints.
+ *
+ * &lt;p&gt;Here live the operations for the N to M relationship, because {@code Clown} is the
+ * owner side: the sub-resources {@code /api/clowns/{id}/cows/{cowId}} are the ones
+ * that create and delete rows in the join table clown_cow.&lt;/p&gt;
+ */
+@RestController
+@RequestMapping(&quot;/api/clowns&quot;)
+@RequiredArgsConstructor
+<span class="fc" id="L35">@Slf4j</span>
+@Tag(name = &quot;Clowns&quot;, description = &quot;Clown CRUD and cow assignment (N to M relationship)&quot;)
+public class ClownController {
+
+    private final ClownService clownService;
+
+    @GetMapping
+    @Operation(
+            summary = &quot;List clowns&quot;,
+            description = &quot;Returns all active clowns with their assigned cows.&quot;
+    )
+    @ApiResponse(responseCode = &quot;200&quot;, description = &quot;List obtained&quot;)
+    public ResponseEntity&lt;List&lt;ClownResponse&gt;&gt; getAllClowns() {
+<span class="fc" id="L48">        return ResponseEntity.ok(clownService.getAll());</span>
+    }
+
+    @GetMapping(&quot;/{id}&quot;)
+    @Operation(summary = &quot;Find a clown by id&quot;)
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Clown found&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Clown does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;ClownResponse&gt; getClownById(
+            @Parameter(description = &quot;Clown id&quot;) @PathVariable UUID id) {
+<span class="fc" id="L60">        IO.println(&quot;PRUEBITA&quot;);</span>
+<span class="fc" id="L61">        return ResponseEntity.ok(clownService.getById(id));</span>
+    }
+
+    @GetMapping(&quot;/cow/{cowId}&quot;)
+    @Operation(
+            summary = &quot;List clowns that take care of a cow&quot;,
+            description = &quot;This is the N to M relationship read from the cow's side.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;List obtained&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Cow does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;List&lt;ClownResponse&gt;&gt; getClownsByCow(
+            @Parameter(description = &quot;Cow id&quot;) @PathVariable UUID cowId) {
+
+<span class="fc" id="L77">        return ResponseEntity.ok(clownService.getByCow(cowId));</span>
+    }
+
+    @PostMapping
+    @Operation(
+            summary = &quot;Create a clown&quot;,
+            description = &quot;&quot;&quot;
+                    If the request includes the &quot;cowIds&quot; list, those cows are
+                    assigned to the clown in the same transaction: for each id a
+                    row is inserted in the clown_cow join table.
+                    Cows must exist and be active.
+                    &quot;&quot;&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;201&quot;, description = &quot;Clown created&quot;),
+            @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid data&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;One of the cows does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;409&quot;, description = &quot;There is already a clown with that name&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;ClownResponse&gt; createClown(@Valid @RequestBody ClownRequest request) {
+<span class="fc" id="L100">        ClownResponse created = clownService.create(request);</span>
+
+<span class="fc" id="L102">        return ResponseEntity</span>
+<span class="fc" id="L103">                .created(URI.create(&quot;/api/clowns/&quot; + created.id()))</span>
+<span class="fc" id="L104">                .body(created);</span>
+    }
+
+    @PatchMapping(&quot;/{id}&quot;)
+    @Operation(
+            summary = &quot;Modify a clown&quot;,
+            description = &quot;Only changes the fields that are sent; those not provided are left unchanged.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Clown updated&quot;),
+            @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid data or empty request&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Clown does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;409&quot;, description = &quot;There is already another clown with that name&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;ClownResponse&gt; updateClown(
+            @Parameter(description = &quot;Clown id&quot;) @PathVariable UUID id,
+            @Valid @RequestBody ClownUpdateRequest request) {
+
+<span class="fc" id="L125">        return ResponseEntity.ok(clownService.update(id, request));</span>
+    }
+
+    @PostMapping(&quot;/{clownId}/cows/{cowId}&quot;)
+    @Operation(
+            summary = &quot;Assign a cow to a clown&quot;,
+            description = &quot;N to M insertion: creates the row (clown_id, cow_id) in the &quot;
+                    + &quot;clown_cow join table. Both entities must exist.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Cow assigned&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Clown or cow does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;409&quot;, description = &quot;That cow was already assigned to that clown&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;ClownResponse&gt; assignCow(
+            @Parameter(description = &quot;Clown id&quot;) @PathVariable UUID clownId,
+            @Parameter(description = &quot;Cow id&quot;) @PathVariable UUID cowId) {
+
+<span class="fc" id="L145">        return ResponseEntity.ok(clownService.assignCow(clownId, cowId));</span>
+    }
+
+    @DeleteMapping(&quot;/{clownId}/cows/{cowId}&quot;)
+    @Operation(
+            summary = &quot;Unassign a cow from a clown&quot;,
+            description = &quot;Deletes the row in the join table. This is a physical &quot;
+                    + &quot;deletion: the clown_cow table only represents the link, it doesn't store &quot;
+                    + &quot;its own data. Neither the cow nor the clown is touched.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Cow unassigned&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Clown or cow does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;409&quot;, description = &quot;That cow was not assigned to that clown&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;ClownResponse&gt; unassignCow(
+            @Parameter(description = &quot;Clown id&quot;) @PathVariable UUID clownId,
+            @Parameter(description = &quot;Cow id&quot;) @PathVariable UUID cowId) {
+
+<span class="fc" id="L166">        return ResponseEntity.ok(clownService.unassignCow(clownId, cowId));</span>
+    }
+
+    @DeleteMapping(&quot;/{id}&quot;)
+    @Operation(
+            summary = &quot;Logically delete a clown&quot;,
+            description = &quot;Logical delete: the row is not deleted, it is marked active = false. &quot;
+                    + &quot;Its assignments in clown_cow are preserved as history.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;204&quot;, description = &quot;Clown deleted&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Clown does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;Void&gt; deleteClown(
+            @Parameter(description = &quot;Clown id&quot;) @PathVariable UUID id) {
+
+<span class="fc" id="L183">        clownService.softDelete(id);</span>
+<span class="fc" id="L184">        return ResponseEntity.noContent().build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

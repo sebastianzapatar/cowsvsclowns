@@ -29,8 +29,24 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Cow service unit tests. Repositories and the
- * OwnerService are mocked to isolate the logic.
+ * Cow service unit tests. Repositories and the {@code OwnerService} are mocked
+ * to isolate the logic.
+ *
+ * <p>This is the richest service in the project, because {@code Cow} sits at the
+ * centre of both relationships: it belongs to an owner (1 to N) and is looked
+ * after by clowns (N to M). So on top of the usual CRUD it has two operations
+ * the others do not — {@code changeOwner}, which moves a cow between owners, and
+ * the resolution of {@code clownIds} when creating.</p>
+ *
+ * <p>Note what is mocked: {@code OwnerService}, not {@code IOwnerRepository}.
+ * Cow logic depends on the <em>behaviour</em> of "give me this owner or fail",
+ * not on the query behind it. Mocking the service keeps the boundary at the
+ * contract, so a change in how owners are fetched does not ripple into these
+ * tests.</p>
+ *
+ * <p>As in the other service tests, the failure cases assert the exception
+ * <b>and</b> that nothing was written, because the order of validation against
+ * persistence is part of what is being protected.</p>
  */
 @ExtendWith(MockitoExtension.class)
 class CowServiceTest {
@@ -38,9 +54,15 @@ class CowServiceTest {
     @Mock
     private ICowRepository cowRepository;
 
+    /** Needed because a cow can arrive with clowns already assigned. */
     @Mock
     private IClownRepository clownRepository;
 
+    /**
+     * The service, not the repository: the dependency is on "resolve this id to
+     * an active owner, or throw a 404", which is exactly what
+     * {@code getActiveEntityOrThrow} promises.
+     */
     @Mock
     private OwnerService ownerService;
 
@@ -111,6 +133,16 @@ class CowServiceTest {
             assertEquals(1, result.size());
         }
 
+        /**
+         * Asking for the cows of an owner that does not exist is a 404 about the
+         * <em>owner</em>, not an empty list. The distinction matters to the
+         * client: an empty list says "this owner has no cows", which is a
+         * perfectly normal answer, while the 404 says "you are asking about
+         * someone who is not there".
+         *
+         * <p>This is also why the owner is resolved first even though the cow
+         * query alone would have returned nothing useful either way.</p>
+         */
         @Test
         @DisplayName("throws 404 if the owner does not exist")
         void ownerNotFound_throws404() {
@@ -173,6 +205,12 @@ class CowServiceTest {
             verify(cowRepository).save(any(Cow.class));
         }
 
+        /**
+         * The interesting create: both relationships resolved in a single call.
+         * The owner comes from an id and the clowns from a list of ids, so one
+         * POST writes the cow row, its {@code owner_id}, and a row in
+         * {@code clown_cow} per clown.
+         */
         @Test
         @DisplayName("creates the cow with owner and clowns")
         void savesWithOwnerAndClowns() {
@@ -194,6 +232,11 @@ class CowServiceTest {
             CowResponse result = cowService.create(request);
 
             assertNotNull(result);
+            // The save goes through the CLOWN, not the cow. Clown is the owning
+            // side of the N to M (it declares the @JoinTable), and Hibernate only
+            // writes clown_cow rows from the owning side. Saving the cow instead
+            // would leave the link silently unpersisted — the call would succeed
+            // and the association would simply not be there afterwards.
             verify(clownRepository).save(clown);
         }
 
@@ -231,6 +274,18 @@ class CowServiceTest {
             assertEquals(500, result.weight());
         }
 
+        /**
+         * A PATCH where every field is null is rejected rather than treated as a
+         * no-op. With PATCH semantics null means "leave this alone", so a body of
+         * all nulls asks for nothing at all — almost always a client bug (a typo
+         * in the field names, most often), and answering 200 would hide it behind
+         * what looks like a successful update.
+         *
+         * <p>It is a 400 and not a 409 because the problem is the request itself,
+         * not a collision with existing state. Note that no mock is primed here:
+         * the check happens before the cow is even looked up, which is what makes
+         * a random id safe to pass.</p>
+         */
         @Test
         @DisplayName("throws 400 if the request is empty")
         void emptyRequest_throws400() {
@@ -257,6 +312,12 @@ class CowServiceTest {
 
     // ============================== Change of owner =======================
 
+    /**
+     * Moving a cow between owners. It gets its own endpoint
+     * ({@code PATCH /api/cows/{id}/owner/{ownerId}}) rather than being a field in
+     * the update DTO, because it is not a field edit: it rewires a relationship,
+     * and both sides of it have to stay consistent in memory.
+     */
     @Nested
     @DisplayName("changeOwner")
     class ChangeOwner {
@@ -278,9 +339,17 @@ class CowServiceTest {
             CowResponse result = cowService.changeOwner(cow.getId(), 2L);
 
             assertNotNull(result);
+            // assertSame, not assertEquals: the cow has to point at this very
+            // instance. The foreign key is written from the cow's side, so this
+            // reference is what actually ends up in owner_id.
             assertSame(newOwner, cow.getOwner());
         }
 
+        /**
+         * Reassigning a cow to the owner it already has is a 409 rather than a
+         * silent success. It is a conflict with current state, and answering 200
+         * would tell the caller a change happened when nothing did.
+         */
         @Test
         @DisplayName("throws 409 if the cow already belongs to that owner")
         void sameOwner_throws409() {
@@ -299,6 +368,13 @@ class CowServiceTest {
 
     // ============================== Logical delete ===========================
 
+    /**
+     * Unlike the owner's, this soft delete cascades nowhere. A cow's clowns are
+     * an N to M: the clowns go on existing and looking after other cows, so
+     * deactivating them would be wrong. The {@code clown_cow} rows are left as
+     * they are too — the mappers filter inactive cows out on the way to the
+     * client, so a deleted cow simply stops appearing in its clowns' listings.
+     */
     @Nested
     @DisplayName("softDelete")
     class SoftDelete {
@@ -307,24 +383,31 @@ class CowServiceTest {
         @DisplayName("deactivates the cow")
         void deactivatesCow() {
             Cow cow = buildCow("Lola");
+            // The cheap finder, without JOIN FETCH: to flip a flag there is no
+            // need to drag the owner and the clowns along.
             when(cowRepository.findByIdAndActiveTrue(cow.getId()))
                     .thenReturn(Optional.of(cow));
 
             cowService.softDelete(cow.getId());
 
             assertFalse(cow.isActive());
+            // save() and not delete(): the row survives, only the flag changes.
             verify(cowRepository).save(cow);
         }
     }
 
     // ============================== Helpers ===============================
 
+    /**
+     * An active cow with a valid owner. The owner is not optional in the
+     * fixture: {@code cows.owner_id} is NOT NULL, so a cow without one could not
+     * exist in the database and testing against it would prove nothing.
+     */
     private Cow buildCow(String name) {
         Owner owner = buildOwner(1L);
-        Cow cow = Cow.builder()
+        return Cow.builder()
                 .id(UUID.randomUUID()).name(name).weight(450).milkperday(12)
                 .active(true).owner(owner).build();
-        return cow;
     }
 
     private Owner buildOwner(Long id) {

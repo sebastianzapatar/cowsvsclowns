@@ -1,0 +1,245 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CowService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.cows.service</a> &gt; <span class="el_source">CowService.java</span></div><h1>CowService.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.cows.service;
+
+import com.sebasmalparqueado.cowsvsclown.clowns.entity.Clown;
+import com.sebasmalparqueado.cowsvsclown.clowns.repository.IClownRepository;
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.BadRequestException;
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.ConflictException;
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.ResourceNotFoundException;
+import com.sebasmalparqueado.cowsvsclown.cows.dto.CowRequest;
+import com.sebasmalparqueado.cowsvsclown.cows.dto.CowResponse;
+import com.sebasmalparqueado.cowsvsclown.cows.dto.CowUpdateRequest;
+import com.sebasmalparqueado.cowsvsclown.cows.entity.Cow;
+import com.sebasmalparqueado.cowsvsclown.cows.mapper.CowMapper;
+import com.sebasmalparqueado.cowsvsclown.cows.repository.ICowRepository;
+import com.sebasmalparqueado.cowsvsclown.owner.entity.Owner;
+import com.sebasmalparqueado.cowsvsclown.owner.service.OwnerService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Cow business rules. This is the service where the two
+ * relationships are seen working together:
+ *
+ * &lt;ul&gt;
+ *   &lt;li&gt;&lt;b&gt;1 to N&lt;/b&gt; with the owner, when creating ({@link #create}) and when
+ *       transferring a cow to another owner ({@link #changeOwner}).&lt;/li&gt;
+ *   &lt;li&gt;&lt;b&gt;N to M&lt;/b&gt; with the clowns, when the creation request brings
+ *       {@code clownIds}.&lt;/li&gt;
+ * &lt;/ul&gt;
+ */
+@Service
+@RequiredArgsConstructor
+<span class="fc" id="L37">@Slf4j</span>
+public class CowService {
+
+    private final ICowRepository cowRepository;
+    private final IClownRepository clownRepository;
+
+    /**
+     * The owner service is injected instead of the repository to reuse its
+     * &quot;find active or throw 404&quot; logic and not repeat that rule here.
+     */
+    private final OwnerService ownerService;
+
+    // ============================== Read ===============================
+
+    /** All active cows, with owner and clowns. */
+    @Transactional(readOnly = true)
+    public List&lt;CowResponse&gt; getCows() {
+<span class="fc" id="L54">        return cowRepository.findAllActiveWithRelations()</span>
+<span class="fc" id="L55">                .stream()</span>
+<span class="fc" id="L56">                .map(CowMapper::toResponse)</span>
+<span class="fc" id="L57">                .toList();</span>
+    }
+
+    /** An active cow by id. Throws 404 if not found. */
+    @Transactional(readOnly = true)
+    public CowResponse getById(UUID id) {
+<span class="fc" id="L63">        Cow cow = cowRepository.findActiveWithRelationsById(id)</span>
+<span class="fc" id="L64">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Cow&quot;, id));</span>
+<span class="fc" id="L65">        return CowMapper.toResponse(cow);</span>
+    }
+
+    /**
+     * Cows of an owner. Before querying we verify that the owner exists,
+     * to be able to respond 404 instead of an empty list that says nothing.
+     */
+    @Transactional(readOnly = true)
+    public List&lt;CowResponse&gt; getByOwner(Long ownerId) {
+<span class="fc" id="L74">        ownerService.getActiveEntityOrThrow(ownerId);</span>
+
+<span class="fc" id="L76">        return cowRepository.findAllByOwnerIdAndActiveTrueOrderByNameAsc(ownerId)</span>
+<span class="fc" id="L77">                .stream()</span>
+<span class="fc" id="L78">                .map(CowMapper::toResponse)</span>
+<span class="fc" id="L79">                .toList();</span>
+    }
+
+    /** Finds a cow by exact name using the native SQL query. */
+    @Transactional(readOnly = true)
+    public CowResponse getByName(String name) {
+<span class="fc" id="L85">        Cow cow = cowRepository.findByNameSQL(name)</span>
+<span class="fc" id="L86">                .orElseThrow(() -&gt; new ResourceNotFoundException(</span>
+<span class="fc" id="L87">                        &quot;There is no cow named '%s'&quot;.formatted(name)));</span>
+<span class="fc" id="L88">        return CowMapper.toResponse(cow);</span>
+    }
+
+    // ============================= Write ==============================
+
+    /**
+     * Creates a cow resolving both of its relationships.
+     *
+     * &lt;p&gt;&lt;b&gt;1 to N:&lt;/b&gt; the owner is found by {@code ownerId} and assigned with
+     * {@code owner.addCow(cow)}, which keeps both sides synchronized. Without
+     * an owner it cannot be created, because owner_id is NOT NULL.&lt;/p&gt;
+     *
+     * &lt;p&gt;&lt;b&gt;N to M:&lt;/b&gt; if {@code clownIds} are provided, the cow is assigned to each
+     * clown. This goes &lt;b&gt;after&lt;/b&gt; the save: the cow needs to have its id
+     * generated before the row can be inserted in the join table.&lt;/p&gt;
+     */
+    @Transactional
+    public CowResponse create(CowRequest request) {
+<span class="fc bfc" id="L106" title="All 2 branches covered.">        if (cowRepository.existsByNameIgnoreCase(request.name())) {</span>
+<span class="fc" id="L107">            throw new ConflictException(</span>
+<span class="fc" id="L108">                    &quot;There is already a cow named '%s'&quot;.formatted(request.name()));</span>
+        }
+
+        // --- 1 to N relationship: the cow is born linked to an existing owner ---
+<span class="fc" id="L112">        Owner owner = ownerService.getActiveEntityOrThrow(request.ownerId());</span>
+
+<span class="fc" id="L114">        Cow cow = CowMapper.toEntity(request);</span>
+<span class="fc" id="L115">        owner.addCow(cow);</span>
+
+<span class="fc" id="L117">        Cow saved = cowRepository.save(cow);</span>
+
+        // --- N to M relationship: assignment to the indicated clowns ---
+<span class="fc" id="L120">        assignClowns(saved, request.clownIdsOrEmpty());</span>
+
+<span class="fc" id="L122">        log.info(&quot;Cow created id={} owner={} clowns={}&quot;,</span>
+<span class="fc" id="L123">                saved.getId(), owner.getId(), request.clownIdsOrEmpty().size());</span>
+
+<span class="fc" id="L125">        return CowMapper.toResponse(saved);</span>
+    }
+
+    /**
+     * Updates the cow's own data. Fields in null are not touched
+     * (PATCH semantics). The owner and clowns have separate endpoints.
+     */
+    @Transactional
+    public CowResponse update(UUID id, CowUpdateRequest request) {
+<span class="fc bfc" id="L134" title="All 2 branches covered.">        if (request.isEmpty()) {</span>
+<span class="fc" id="L135">            throw new BadRequestException(</span>
+                    &quot;The request has no fields to update&quot;);
+        }
+
+<span class="fc" id="L139">        Cow cow = cowRepository.findActiveWithRelationsById(id)</span>
+<span class="pc" id="L140">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Cow&quot;, id));</span>
+
+<span class="fc bfc" id="L142" title="All 2 branches covered.">        if (request.name() != null) {</span>
+            // AndIdNot: if the name is not changed, the cow shouldn't collide with itself.
+<span class="fc bfc" id="L144" title="All 2 branches covered.">            if (cowRepository.existsByNameIgnoreCaseAndIdNot(request.name(), id)) {</span>
+<span class="fc" id="L145">                throw new ConflictException(</span>
+<span class="fc" id="L146">                        &quot;There is already another cow named '%s'&quot;.formatted(request.name()));</span>
+            }
+<span class="fc" id="L148">            cow.setName(request.name());</span>
+        }
+<span class="pc bpc" id="L150" title="1 of 2 branches missed.">        if (request.weight() != null) {</span>
+<span class="fc" id="L151">            cow.setWeight(request.weight());</span>
+        }
+<span class="pc bpc" id="L153" title="1 of 2 branches missed.">        if (request.milkperday() != null) {</span>
+<span class="nc" id="L154">            cow.setMilkperday(request.milkperday());</span>
+        }
+
+<span class="fc" id="L157">        Cow updated = cowRepository.save(cow);</span>
+<span class="fc" id="L158">        log.info(&quot;Cow updated id={}&quot;, id);</span>
+<span class="fc" id="L159">        return CowMapper.toResponse(updated);</span>
+    }
+
+    /**
+     * &lt;b&gt;1 to N insertion on an already existing cow:&lt;/b&gt; changes its owner.
+     *
+     * &lt;p&gt;The only thing that updates the owner_id column is {@code cow.setOwner()},
+     * because the owner side of the relationship is the {@code @ManyToOne}. Both
+     * lists in memory are still adjusted so that an object already loaded in this
+     * transaction does not become outdated.&lt;/p&gt;
+     */
+    @Transactional
+    public CowResponse changeOwner(UUID cowId, Long newOwnerId) {
+<span class="fc" id="L172">        Cow cow = cowRepository.findActiveWithRelationsById(cowId)</span>
+<span class="pc" id="L173">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Cow&quot;, cowId));</span>
+
+<span class="fc" id="L175">        Owner newOwner = ownerService.getActiveEntityOrThrow(newOwnerId);</span>
+<span class="fc" id="L176">        Owner currentOwner = cow.getOwner();</span>
+
+<span class="pc bpc" id="L178" title="1 of 4 branches missed.">        if (currentOwner != null &amp;&amp; currentOwner.getId().equals(newOwnerId)) {</span>
+<span class="fc" id="L179">            throw new ConflictException(</span>
+                    &quot;The cow '%s' already belongs to %s&quot;
+<span class="fc" id="L181">                            .formatted(cow.getName(), newOwner.getFullName()));</span>
+        }
+
+        /*
+         * It is removed from the previous owner's list with a direct remove and NOT with
+         * owner.removeCow(), because that helper also does cow.setOwner(null) and
+         * the relationship has orphanRemoval = true: Hibernate would interpret that the
+         * cow became an orphan and would delete it from the database upon commit.
+         */
+<span class="pc bpc" id="L190" title="1 of 2 branches missed.">        if (currentOwner != null) {</span>
+<span class="fc" id="L191">            currentOwner.getCows().remove(cow);</span>
+        }
+<span class="fc" id="L193">        newOwner.addCow(cow);</span>
+
+<span class="fc" id="L195">        Cow updated = cowRepository.save(cow);</span>
+<span class="fc" id="L196">        log.info(&quot;Cow id={} transferred to owner id={}&quot;, cowId, newOwnerId);</span>
+<span class="fc" id="L197">        return CowMapper.toResponse(updated);</span>
+    }
+
+    /**
+     * Logical delete of the cow: {@code active = false}, the row stays.
+     *
+     * &lt;p&gt;The rows in the clown_cow join table are not touched: this preserves
+     * the history of which clown took care of it. Since the mappers filter by
+     * active, the cow stops appearing in the response of those clowns anyway.&lt;/p&gt;
+     */
+    @Transactional
+    public void softDelete(UUID id) {
+<span class="fc" id="L209">        Cow cow = cowRepository.findByIdAndActiveTrue(id)</span>
+<span class="pc" id="L210">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Cow&quot;, id));</span>
+
+<span class="fc" id="L212">        cow.setActive(false);</span>
+<span class="fc" id="L213">        cowRepository.save(cow);</span>
+<span class="fc" id="L214">        log.info(&quot;Cow logically deleted id={}&quot;, id);</span>
+<span class="fc" id="L215">    }</span>
+
+    // ============================= Utilities ============================
+
+    /**
+     * Assigns the cow to each clown in the list (N to M relationship).
+     *
+     * &lt;p&gt;The assignment is done with {@code clown.addCow(cow)} and the clown is
+     * saved, not the cow: the owner side of the relationship is Clown, who holds
+     * the {@code @JoinTable}. Doing it the other way around would not insert anything
+     * in clown_cow.&lt;/p&gt;
+     */
+    private void assignClowns(Cow cow, List&lt;UUID&gt; clownIds) {
+<span class="fc bfc" id="L228" title="All 2 branches covered.">        if (clownIds.isEmpty()) {</span>
+<span class="fc" id="L229">            return;</span>
+        }
+
+<span class="fc bfc" id="L232" title="All 2 branches covered.">        for (UUID clownId : clownIds) {</span>
+<span class="fc" id="L233">            Clown clown = clownRepository.findByIdAndActiveTrue(clownId)</span>
+<span class="pc" id="L234">                    .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Clown&quot;, clownId));</span>
+
+            // Ignores duplicates within the same request instead of failing:
+            // the result requested by the client is fulfilled anyway.
+<span class="pc bpc" id="L238" title="1 of 2 branches missed.">            if (!clown.hasCow(cow)) {</span>
+<span class="fc" id="L239">                clown.addCow(cow);</span>
+<span class="fc" id="L240">                clownRepository.save(clown);</span>
+            }
+<span class="fc" id="L242">        }</span>
+<span class="fc" id="L243">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

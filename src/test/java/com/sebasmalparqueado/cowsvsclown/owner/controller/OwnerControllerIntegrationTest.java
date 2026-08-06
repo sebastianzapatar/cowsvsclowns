@@ -26,7 +26,23 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Controller integration tests for {@link OwnerController}.
- * Uses @WebMvcTest to test the web layer in isolation, mocking the service layer.
+ * Uses {@code @WebMvcTest} to test the web layer in isolation, mocking the
+ * service layer.
+ *
+ * <p><b>Why these count as integration tests</b> even though the service is
+ * mocked: nothing here is called directly. The request goes through the real
+ * Spring MVC machinery — routing, JSON deserialisation, {@code @Valid},
+ * {@code GlobalExceptionHandler}, then serialisation of the answer. That is a
+ * lot of framework wiring, and it is precisely the part that a unit test of the
+ * controller class would skip.</p>
+ *
+ * <p>{@code @WebMvcTest} loads only the web slice: this controller, the handler
+ * advice and the Jackson setup. No database, no other controllers, no services —
+ * hence the {@code @MockitoBean}.</p>
+ *
+ * <p>What is being verified here is the <b>HTTP contract</b>: status codes,
+ * headers, and the shape of the JSON. Business rules are the service tests' job,
+ * and the two together are what the e2e tests then exercise for real.</p>
  */
 @WebMvcTest(OwnerController.class)
 @ActiveProfiles("test")
@@ -37,6 +53,11 @@ class OwnerControllerIntegrationTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    /**
+     * Replaces the real service in the context. Without it the slice would fail
+     * to start, because the controller cannot be constructed without its
+     * dependency.
+     */
     @MockitoBean
     private OwnerService ownerService;
 
@@ -82,6 +103,13 @@ class OwnerControllerIntegrationTest {
             verify(ownerService).getById(1L);
         }
 
+        /**
+         * The controller has no {@code try/catch}: the service throws and
+         * {@code GlobalExceptionHandler} turns that into a 404 with the standard
+         * body. This test is what proves the advice is actually wired into the
+         * slice — the message asserted below is the one built by the exception,
+         * so it also confirms nothing swallowed or rewrote it on the way out.
+         */
         @Test
         @DisplayName("returns 404 Not Found if the owner does not exist")
         void returnsNotFoundIfMissing() throws Exception {
@@ -113,14 +141,25 @@ class OwnerControllerIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isCreated())
+                    // 201 must carry a Location header pointing at the new
+                    // resource. It is the part of REST most often left out, and
+                    // the id in it comes from the response the service returned —
+                    // so this also checks the controller reads it from the right
+                    // place instead of echoing something from the request.
                     .andExpect(header().string("Location", "/api/owners/2"))
                     .andExpect(jsonPath("$.firstName").value("Juan"));
         }
 
+        /**
+         * The 400 here is raised by {@code @Valid} before the controller body
+         * ever runs, so it exercises a different path from the business 400s in
+         * the service tests.
+         */
         @Test
         @DisplayName("returns 400 Bad Request when data is invalid")
         void returnsBadRequestWhenInvalid() throws Exception {
-            // Missing first name and last name
+            // Empty strings rather than nulls: @NotBlank rejects both, and blanks
+            // are what a form actually submits.
             OwnerRequest request = new OwnerRequest("", "", null);
 
             mockMvc.perform(post("/api/owners")
@@ -129,6 +168,9 @@ class OwnerControllerIntegrationTest {
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message").value("There are invalid fields in the request"));
 
+            // The service is never reached. This is what proves validation runs
+            // at the boundary: if it were happening inside the service instead,
+            // invalid data would already have crossed into the business layer.
             verify(ownerService, never()).create(any());
         }
     }
@@ -139,9 +181,16 @@ class OwnerControllerIntegrationTest {
     @DisplayName("PATCH /api/owners/{id}")
     class UpdateOwner {
 
+        /**
+         * PATCH and not PUT, because only the fields that are sent get changed.
+         * The answer is 200 with the updated resource — not 206, which is for
+         * ranged downloads and has nothing to do with partial updates.
+         */
         @Test
         @DisplayName("returns 200 OK when update is valid")
         void returnsOkWhenValid() throws Exception {
+            // Only the first name travels; the null last name is what makes this
+            // a partial update.
             OwnerUpdateRequest request = new OwnerUpdateRequest("Mario", null);
             OwnerResponse response = new OwnerResponse(
                     1L, "Mario", "Zapata", "Mario Zapata", true, 0, List.of());
@@ -162,6 +211,12 @@ class OwnerControllerIntegrationTest {
     @DisplayName("DELETE /api/owners/{id}")
     class DeleteOwner {
 
+        /**
+         * 204 and not 200: the deletion succeeded and there is no body worth
+         * sending back. Note that from the client's side this looks like an
+         * ordinary delete — that it is a soft delete underneath is an
+         * implementation detail the HTTP contract does not expose.
+         */
         @Test
         @DisplayName("returns 204 No Content on successful deletion")
         void returnsNoContentOnSuccess() throws Exception {
@@ -171,6 +226,9 @@ class OwnerControllerIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON))
                     .andExpect(status().isNoContent());
 
+            // softDelete returns void, so there is no response to assert on:
+            // verifying the call is the only way to know the controller did
+            // anything at all.
             verify(ownerService).softDelete(1L);
         }
     }

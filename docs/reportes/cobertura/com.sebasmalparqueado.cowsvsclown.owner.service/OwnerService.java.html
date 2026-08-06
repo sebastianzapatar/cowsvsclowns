@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>OwnerService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.owner.service</a> &gt; <span class="el_source">OwnerService.java</span></div><h1>OwnerService.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.owner.service;
+
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.ConflictException;
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.ResourceNotFoundException;
+import com.sebasmalparqueado.cowsvsclown.cows.repository.ICowRepository;
+import com.sebasmalparqueado.cowsvsclown.owner.dto.OwnerCowRequest;
+import com.sebasmalparqueado.cowsvsclown.owner.dto.OwnerRequest;
+import com.sebasmalparqueado.cowsvsclown.owner.dto.OwnerResponse;
+import com.sebasmalparqueado.cowsvsclown.owner.dto.OwnerUpdateRequest;
+import com.sebasmalparqueado.cowsvsclown.owner.entity.Owner;
+import com.sebasmalparqueado.cowsvsclown.owner.mapper.OwnerMapper;
+import com.sebasmalparqueado.cowsvsclown.owner.repository.IOwnerRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * Owner business rules.
+ *
+ * &lt;p&gt;The service is the only one making decisions: it validates, coordinates repositories and builds
+ * the response. The controller only receives HTTP and the repository only talks to
+ * the database; neither makes decisions.&lt;/p&gt;
+ *
+ * &lt;p&gt;All methods are transactional. Read methods carry
+ * {@code readOnly = true} (tells Hibernate not to check for changes upon
+ * closing, and Postgres that the transaction does not write). Write methods carry
+ * plain {@code @Transactional}: if something fails midway, everything is rolled back.&lt;/p&gt;
+ */
+@Service
+@RequiredArgsConstructor
+<span class="fc" id="L36">@Slf4j</span>
+public class OwnerService {
+
+    private final IOwnerRepository ownerRepository;
+
+    /**
+     * Only used to validate that cow names are not repeated when they arrive
+     * nested in the owner. Cows are saved by cascade, not with this repo.
+     */
+    private final ICowRepository cowRepository;
+
+    // ============================== Read ===============================
+
+    /** All active owners, each with their cows. */
+    @Transactional(readOnly = true)
+    public List&lt;OwnerResponse&gt; getAll() {
+<span class="fc" id="L52">        return ownerRepository.findAllActiveWithCows()</span>
+<span class="fc" id="L53">                .stream()</span>
+<span class="fc" id="L54">                .map(OwnerMapper::toResponse)</span>
+<span class="fc" id="L55">                .toList();</span>
+    }
+
+    /** An active owner by id. Throws 404 if not found. */
+    @Transactional(readOnly = true)
+    public OwnerResponse getById(Long id) {
+<span class="fc" id="L61">        Owner owner = ownerRepository.findActiveWithCowsById(id)</span>
+<span class="fc" id="L62">                .orElseThrow(() -&gt;</span>
+<span class="fc" id="L63">                        ResourceNotFoundException.of</span>
+<span class="fc" id="L64">                                (&quot;Owner&quot;, id));</span>
+<span class="fc" id="L65">        return OwnerMapper.toResponse(owner);</span>
+    }
+
+    // ============================= Write ==============================
+
+    /**
+     * Creates an owner and, if they come in the request, their cows at once.
+     *
+     * &lt;p&gt;&lt;b&gt;1 to N insertion.&lt;/b&gt; The {@code ownerRepository.save()} saves the
+     * owner and, because of the {@code cascade = ALL} of the {@code @OneToMany}, also
+     * each cow in the list. Hibernate sorts the INSERTs alone: first the
+     * owner, to have its id generated, and then the cows with that id already
+     * set in the owner_id column.&lt;/p&gt;
+     */
+    @Transactional
+    public OwnerResponse create(OwnerRequest request) {
+<span class="fc" id="L81">        validateOwnerIsNotDuplicated(request.firstName(), request.lastName(), null);</span>
+<span class="fc" id="L82">        validateCowNames(request.cowsOrEmpty());</span>
+
+<span class="fc" id="L84">        Owner owner = OwnerMapper.toEntity(request);</span>
+<span class="fc" id="L85">        Owner saved = ownerRepository.save(owner);</span>
+
+<span class="fc" id="L87">        log.info(&quot;Owner created id={} with {} cow(s)&quot;,</span>
+<span class="fc" id="L88">                saved.getId(), saved.getCows().size());</span>
+<span class="fc" id="L89">        return OwnerMapper.toResponse(saved);</span>
+    }
+
+    /**
+     * Updates first and/or last name. Fields arriving in null are left
+     * as they were: this is PATCH semantics.
+     */
+    @Transactional
+    public OwnerResponse update(Long id, OwnerUpdateRequest request) {
+<span class="fc" id="L98">        Owner owner = ownerRepository.findActiveWithCowsById(id)</span>
+<span class="fc" id="L99">                .orElseThrow(() -&gt;</span>
+<span class="fc" id="L100">                        ResourceNotFoundException.of(&quot;Owner&quot;, id));</span>
+
+        // The full name is calculated to validate the duplicate
+        // against the new values, not against the ones the entity still has.
+<span class="pc bpc" id="L104" title="1 of 2 branches missed.">        String nuevoNombre = request.firstName() != null</span>
+<span class="pc" id="L105">                ? request.firstName() : owner.getFirstName();</span>
+<span class="fc bfc" id="L106" title="All 2 branches covered.">        String nuevoApellido = request.lastName() != null</span>
+<span class="fc" id="L107">                ? request.lastName() : owner.getLastName();</span>
+
+<span class="fc" id="L109">        validateOwnerIsNotDuplicated(nuevoNombre, nuevoApellido, id);</span>
+
+<span class="fc" id="L111">        owner.setFirstName(nuevoNombre);</span>
+<span class="fc" id="L112">        owner.setLastName(nuevoApellido);</span>
+
+        /*
+         * There is no need to call save(): the entity is &quot;managed&quot; inside the
+         * transaction, so Hibernate detects the change and issues the UPDATE upon
+         * commit. The save() is left anyway because it is more explicit to read.
+         */
+<span class="fc" id="L119">        Owner updated = ownerRepository.save(owner);</span>
+
+<span class="fc" id="L121">        log.info(&quot;Owner updated id={}&quot;, id);</span>
+<span class="fc" id="L122">        return OwnerMapper.toResponse(updated);</span>
+    }
+
+    /**
+     * Logical delete of the owner.
+     *
+     * &lt;p&gt;The row is never deleted: it is marked {@code active = false}. The same
+     * is done with their cows, because the owner_id column is NOT NULL and a cow cannot
+     * be left without an owner. If later one wanted to keep the cows,
+     * they should be transferred beforehand with
+     * {@code PATCH /api/cows/{id}/owner/{ownerId}}.&lt;/p&gt;
+     */
+    @Transactional
+    public void softDelete(Long id) {
+<span class="fc" id="L136">        Owner owner = ownerRepository.findActiveWithCowsById(id)</span>
+<span class="fc" id="L137">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Owner&quot;, id));</span>
+
+<span class="fc" id="L139">        owner.setActive(false);</span>
+<span class="fc" id="L140">        owner.getCows().forEach(cow -&gt; cow.setActive(false));</span>
+
+<span class="fc" id="L142">        ownerRepository.save(owner);</span>
+<span class="fc" id="L143">        log.info(&quot;Owner logically deleted id={} along with {} cow(s)&quot;, id, owner.getCows().size());</span>
+<span class="fc" id="L144">    }</span>
+
+    // ============================ Validations ============================
+
+    /**
+     * Two active owners with the same first and last name are not allowed.
+     *
+     * @param idAExcluir id of the owner being updated, or null if being
+     *                   created. Without this, when updating without changing the
+     *                   name the owner would collide with themselves.
+     */
+    private void validateOwnerIsNotDuplicated(String firstName, String lastName, Long idAExcluir) {
+<span class="fc bfc" id="L156" title="All 2 branches covered.">        boolean existe = idAExcluir == null</span>
+                ? ownerRepository
+<span class="fc" id="L158">                .existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndActiveTrue(</span>
+                        firstName, lastName)
+                : ownerRepository
+<span class="fc" id="L161">                .existsByFirstNameIgnoreCaseAndLastNameIgnoreCaseAndActiveTrueAndIdNot(</span>
+                        firstName, lastName, idAExcluir);
+
+<span class="fc bfc" id="L164" title="All 2 branches covered.">        if (existe) {</span>
+<span class="fc" id="L165">            throw new ConflictException(</span>
+<span class="fc" id="L166">                    &quot;There is already an owner named %s %s&quot;.formatted(firstName, lastName));</span>
+        }
+<span class="fc" id="L168">    }</span>
+
+    /**
+     * Checks the names of the cows that come nested: that they do not repeat
+     * among themselves nor against those already in the database.
+     *
+     * &lt;p&gt;It is validated before saving to be able to return a 409 with a clear
+     * message. If allowed to pass, Postgres's UNIQUE constraint would trigger and the message
+     * would be much more cryptic.&lt;/p&gt;
+     */
+    private void validateCowNames(List&lt;OwnerCowRequest&gt; cows) {
+<span class="fc" id="L179">        Set&lt;String&gt; vistos = new HashSet&lt;&gt;();</span>
+
+<span class="fc bfc" id="L181" title="All 2 branches covered.">        for (OwnerCowRequest cow : cows) {</span>
+<span class="fc" id="L182">            String nombreNormalizado = cow.name().toLowerCase();</span>
+
+<span class="pc bpc" id="L184" title="1 of 2 branches missed.">            if (!vistos.add(nombreNormalizado)) {</span>
+<span class="nc" id="L185">                throw new ConflictException(</span>
+                        &quot;The cow name '%s' is repeated in the request&quot;
+<span class="nc" id="L187">                                .formatted(cow.name()));</span>
+            }
+<span class="fc bfc" id="L189" title="All 2 branches covered.">            if (cowRepository.existsByNameIgnoreCase(cow.name())) {</span>
+<span class="fc" id="L190">                throw new ConflictException(</span>
+<span class="fc" id="L191">                        &quot;There is already a cow named '%s'&quot;.formatted(cow.name()));</span>
+            }
+<span class="fc" id="L193">        }</span>
+<span class="fc" id="L194">    }</span>
+
+    // ======================= Internal use of other services ===============
+
+    /**
+     * Returns the active Owner entity or throws 404.
+     *
+     * &lt;p&gt;Used by {@code CowService} to resolve the owner when creating or transferring
+     * a cow. Returns the entity and not the DTO precisely because the caller
+     * needs the JPA object to build the relationship.&lt;/p&gt;
+     */
+    @Transactional(readOnly = true)
+    public Owner getActiveEntityOrThrow(Long id) {
+<span class="fc" id="L207">        return ownerRepository.findByIdAndActiveTrue(id)</span>
+<span class="fc" id="L208">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Owner&quot;, id));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

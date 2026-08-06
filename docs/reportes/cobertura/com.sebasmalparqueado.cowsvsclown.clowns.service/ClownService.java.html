@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClownService.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.clowns.service</a> &gt; <span class="el_source">ClownService.java</span></div><h1>ClownService.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.clowns.service;
+
+import com.sebasmalparqueado.cowsvsclown.clowns.dto.ClownRequest;
+import com.sebasmalparqueado.cowsvsclown.clowns.dto.ClownResponse;
+import com.sebasmalparqueado.cowsvsclown.clowns.dto.ClownUpdateRequest;
+import com.sebasmalparqueado.cowsvsclown.clowns.entity.Clown;
+import com.sebasmalparqueado.cowsvsclown.clowns.mapper.ClownMapper;
+import com.sebasmalparqueado.cowsvsclown.clowns.repository.IClownRepository;
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.BadRequestException;
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.ConflictException;
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.ResourceNotFoundException;
+import com.sebasmalparqueado.cowsvsclown.cows.entity.Cow;
+import com.sebasmalparqueado.cowsvsclown.cows.repository.ICowRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Clown business rules and, most importantly, the place where the 
+ * &lt;b&gt;N to M&lt;/b&gt; relationship with cows is managed.
+ *
+ * &lt;p&gt;All cow-clown assignments are done here because of JPA: 
+ * {@link Clown} is the owner side of the relationship (the one that declares
+ * {@code @JoinTable}), and Hibernate only looks at the list on this side to decide
+ * which rows to insert or delete in the join table clown_cow. Modifying
+ * {@code cow.getClowns()} wouldn't persist anything.&lt;/p&gt;
+ */
+@Service
+@RequiredArgsConstructor
+<span class="fc" id="L34">@Slf4j</span>
+public class ClownService {
+
+    private final IClownRepository clownRepository;
+    private final ICowRepository cowRepository;
+
+    // ============================== Read ===============================
+
+    /** All active clowns, with their cows. */
+    @Transactional(readOnly = true)
+    public List&lt;ClownResponse&gt; getAll() {
+<span class="fc" id="L45">        return clownRepository.findAllActiveWithCows()</span>
+<span class="fc" id="L46">                .stream()</span>
+<span class="fc" id="L47">                .map(ClownMapper::toResponse)</span>
+<span class="fc" id="L48">                .toList();</span>
+    }
+
+    /** An active clown by id. Throws 404 if not found. */
+    @Transactional(readOnly = true)
+    public ClownResponse getById(UUID id) {
+<span class="fc" id="L54">        Clown clown = clownRepository.findActiveWithCowsById(id)</span>
+<span class="fc" id="L55">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Clown&quot;, id));</span>
+<span class="fc" id="L56">        return ClownMapper.toResponse(clown);</span>
+    }
+
+    /**
+     * Clowns taking care of a cow: the N to M relationship read from the other side.
+     * First validates that the cow exists to return a 404.
+     */
+    @Transactional(readOnly = true)
+    public List&lt;ClownResponse&gt; getByCow(UUID cowId) {
+<span class="fc" id="L65">        findActiveCowOrThrow(cowId);</span>
+
+<span class="fc" id="L67">        return clownRepository.findActiveByCowId(cowId)</span>
+<span class="fc" id="L68">                .stream()</span>
+<span class="fc" id="L69">                .map(ClownMapper::toResponse)</span>
+<span class="fc" id="L70">                .toList();</span>
+    }
+
+    // ============================= Write ==============================
+
+    /**
+     * Creates a clown and, if the request brings {@code cowIds}, assigns those
+     * cows at once (N to M insertion).
+     *
+     * &lt;p&gt;Cows are added &lt;b&gt;before&lt;/b&gt; the save: since Clown is the owner side, 
+     * when saving, Hibernate inserts the clown and in the same commit inserts
+     * the rows in clown_cow.&lt;/p&gt;
+     */
+    @Transactional
+    public ClownResponse create(ClownRequest request) {
+<span class="fc bfc" id="L85" title="All 2 branches covered.">        if (clownRepository.existsByNameIgnoreCase(request.name())) {</span>
+<span class="fc" id="L86">            throw new ConflictException(</span>
+<span class="fc" id="L87">                    &quot;There is already a clown named '%s'&quot;.formatted(request.name()));</span>
+        }
+
+<span class="fc" id="L90">        Clown clown = ClownMapper.toEntity(request);</span>
+
+<span class="fc bfc" id="L92" title="All 2 branches covered.">        for (UUID cowId : request.cowIdsOrEmpty()) {</span>
+<span class="fc" id="L93">            Cow cow = findActiveCowOrThrow(cowId);</span>
+            // Ignores duplicated ids within the same request: the result
+            // requested by the client is still fulfilled.
+<span class="pc bpc" id="L96" title="1 of 2 branches missed.">            if (!clown.hasCow(cow)) {</span>
+<span class="fc" id="L97">                clown.addCow(cow);</span>
+            }
+<span class="fc" id="L99">        }</span>
+
+<span class="fc" id="L101">        Clown saved = clownRepository.save(clown);</span>
+
+<span class="fc" id="L103">        log.info(&quot;Clown created id={} with {} assigned cow(s)&quot;,</span>
+<span class="fc" id="L104">                saved.getId(), saved.getCows().size());</span>
+
+<span class="fc" id="L106">        return ClownMapper.toResponse(saved);</span>
+    }
+
+    /**
+     * Updates name and/or description. Null fields are not touched
+     * (PATCH semantics). Assigned cows are managed with
+     * {@link #assignCow} and {@link #unassignCow}.
+     */
+    @Transactional
+    public ClownResponse update(UUID id, ClownUpdateRequest request) {
+<span class="fc bfc" id="L116" title="All 2 branches covered.">        if (request.isEmpty()) {</span>
+<span class="fc" id="L117">            throw new BadRequestException(</span>
+                    &quot;The request has no fields to update&quot;);
+        }
+
+<span class="fc" id="L121">        Clown clown = clownRepository.findActiveWithCowsById(id)</span>
+<span class="pc" id="L122">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Clown&quot;, id));</span>
+
+<span class="pc bpc" id="L124" title="1 of 2 branches missed.">        if (request.name() != null) {</span>
+            // AndIdNot: if the name is not changed, the clown shouldn't collide with itself.
+<span class="pc bpc" id="L126" title="1 of 2 branches missed.">            if (clownRepository.existsByNameIgnoreCaseAndIdNot(request.name(), id)) {</span>
+<span class="nc" id="L127">                throw new ConflictException(</span>
+<span class="nc" id="L128">                        &quot;There is already another clown named '%s'&quot;.formatted(request.name()));</span>
+            }
+<span class="fc" id="L130">            clown.setName(request.name());</span>
+        }
+<span class="fc bfc" id="L132" title="All 2 branches covered.">        if (request.description() != null) {</span>
+<span class="fc" id="L133">            clown.setDescription(request.description());</span>
+        }
+
+<span class="fc" id="L136">        Clown updated = clownRepository.save(clown);</span>
+<span class="fc" id="L137">        log.info(&quot;Clown updated id={}&quot;, id);</span>
+<span class="fc" id="L138">        return ClownMapper.toResponse(updated);</span>
+    }
+
+    /**
+     * &lt;b&gt;N to M insertion:&lt;/b&gt; assigns an existing cow to an existing clown.
+     * It's a new row in the clown_cow join table.
+     */
+    @Transactional
+    public ClownResponse assignCow(UUID clownId, UUID cowId) {
+<span class="fc" id="L147">        Clown clown = clownRepository.findActiveWithCowsById(clownId)</span>
+<span class="pc" id="L148">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Clown&quot;, clownId));</span>
+
+<span class="fc" id="L150">        Cow cow = findActiveCowOrThrow(cowId);</span>
+
+        // Here a 409 is responded and not silently ignored: the client explicitly
+        // requested to create an assignment that already existed.
+<span class="fc bfc" id="L154" title="All 2 branches covered.">        if (clown.hasCow(cow)) {</span>
+<span class="fc" id="L155">            throw new ConflictException(</span>
+                    &quot;The cow '%s' is already assigned to the clown '%s'&quot;
+<span class="fc" id="L157">                            .formatted(cow.getName(), clown.getName()));</span>
+        }
+
+<span class="fc" id="L160">        clown.addCow(cow);</span>
+<span class="fc" id="L161">        Clown updated = clownRepository.save(clown);</span>
+
+<span class="fc" id="L163">        log.info(&quot;Cow id={} assigned to clown id={}&quot;, cowId, clownId);</span>
+<span class="fc" id="L164">        return ClownMapper.toResponse(updated);</span>
+    }
+
+    /**
+     * Removes the assignment between a clown and a cow: deletes the row in
+     * clown_cow.
+     *
+     * &lt;p&gt;This IS a physical deletion, and it's fine: the join table doesn't
+     * store its own data, it only represents the link. Neither the cow nor 
+     * the clown is touched.&lt;/p&gt;
+     */
+    @Transactional
+    public ClownResponse unassignCow(UUID clownId, UUID cowId) {
+<span class="fc" id="L177">        Clown clown = clownRepository.findActiveWithCowsById(clownId)</span>
+<span class="pc" id="L178">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Clown&quot;, clownId));</span>
+
+<span class="fc" id="L180">        Cow cow = findActiveCowOrThrow(cowId);</span>
+
+<span class="fc bfc" id="L182" title="All 2 branches covered.">        if (!clown.hasCow(cow)) {</span>
+<span class="fc" id="L183">            throw new ConflictException(</span>
+                    &quot;The cow '%s' is not assigned to the clown '%s'&quot;
+<span class="fc" id="L185">                            .formatted(cow.getName(), clown.getName()));</span>
+        }
+
+<span class="fc" id="L188">        clown.removeCow(cow);</span>
+<span class="fc" id="L189">        Clown updated = clownRepository.save(clown);</span>
+
+<span class="fc" id="L191">        log.info(&quot;Cow id={} unassigned from clown id={}&quot;, cowId, clownId);</span>
+<span class="fc" id="L192">        return ClownMapper.toResponse(updated);</span>
+    }
+
+    /**
+     * Clown logical delete.
+     *
+     * &lt;p&gt;Its rows in clown_cow are not deleted: the clown disappears from 
+     * queries because they all filter by active, but the record of which 
+     * cows it took care of remains.&lt;/p&gt;
+     */
+    @Transactional
+    public void softDelete(UUID id) {
+<span class="fc" id="L204">        Clown clown = clownRepository.findByIdAndActiveTrue(id)</span>
+<span class="pc" id="L205">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Clown&quot;, id));</span>
+
+<span class="fc" id="L207">        clown.setActive(false);</span>
+<span class="fc" id="L208">        clownRepository.save(clown);</span>
+<span class="fc" id="L209">        log.info(&quot;Clown logically deleted id={}&quot;, id);</span>
+<span class="fc" id="L210">    }</span>
+
+    // ============================= Utilities ============================
+
+    /** Finds an active cow or throws 404. Repeated in several methods here. */
+    private Cow findActiveCowOrThrow(UUID cowId) {
+<span class="fc" id="L216">        return cowRepository.findByIdAndActiveTrue(cowId)</span>
+<span class="pc" id="L217">                .orElseThrow(() -&gt; ResourceNotFoundException.of(&quot;Cow&quot;, cowId));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

@@ -51,6 +51,54 @@ tasks.named('test') {
 	finalizedBy tasks.named('jacocoTestReport')
 }
 
+// ======================= Correr las pruebas por tipo =========================
+// La tarea "test" las corre todas juntas. Estas tres permiten correr solo una
+// familia, que es lo útil mientras se trabaja: las unitarias tardan menos de un
+// segundo, mientras que las e2e levantan la aplicación entera y son las lentas.
+//
+// La clasificación se hace por el nombre de la clase, que es la convención que
+// ya seguía el proyecto:
+//
+//   *E2ETest          -> levantan la app completa y pegan por HTTP
+//   *IntegrationTest  -> levantan una porción de Spring (@WebMvcTest, @DataJpaTest)
+//   el resto          -> unitarias puras, sin contexto de Spring
+//
+// Ninguna de las tres genera reporte de cobertura: el porcentaje solo tiene
+// sentido con la suite completa, porque una clase cubierta por las e2e
+// aparecería como no cubierta al correr solo las unitarias. Para cobertura va
+// "./gradlew test".
+def registrarSuite = { String nombre, String descripcion, Closure filtro ->
+	tasks.register(nombre, Test) {
+		group = 'verification'
+		it.description = descripcion
+		useJUnitPlatform()
+		// Sin estas dos líneas la tarea no sabe qué compilar ni con qué
+		// classpath: hereda de "test" solo la configuración, no las entradas.
+		testClassesDirs = sourceSets.test.output.classesDirs
+		classpath = sourceSets.test.runtimeClasspath
+		filter(filtro)
+	}
+}
+
+registrarSuite('pruebasUnitarias',
+		'Solo las pruebas unitarias (servicios, mappers y excepciones).') {
+	// Se define por descarte: todo lo que no sea integración, e2e ni el smoke
+	// del contexto. Así una clase unitaria nueva entra sola, sin tocar nada.
+	excludeTestsMatching '*IntegrationTest'
+	excludeTestsMatching '*E2ETest'
+	excludeTestsMatching 'CowsvsclownApplicationTests'
+}
+
+registrarSuite('pruebasIntegracion',
+		'Solo las pruebas de integración (controllers con MockMvc y repositorios con H2).') {
+	includeTestsMatching '*IntegrationTest'
+}
+
+registrarSuite('pruebasE2E',
+		'Solo las pruebas end to end (la app completa por HTTP real).') {
+	includeTestsMatching '*E2ETest'
+}
+
 jacoco {
 	toolVersion = '0.8.14'
 }
@@ -133,6 +181,46 @@ tasks.register('cobertura') {
 		println 'Reportes generados:'
 		println "  Tests     -> ${reporteTests.get().asFile.toURI()}"
 		println "  Cobertura -> ${reporteCobertura.get().asFile.toURI()}"
+		println ''
+	}
+}
+
+// ===================== Publicar los reportes al repositorio ==================
+// Los HTML que genera Gradle viven en build/, que está en .gitignore porque es
+// contenido generado. Esta tarea los copia a docs/reportes/, que sí se versiona,
+// para poder abrirlos desde GitHub sin tener que clonar y correr las pruebas.
+//
+// Es una FOTO del momento en que se corrió: no se actualiza sola. Después de
+// tocar código hay que volver a ejecutar "./gradlew publicarReportes" o lo que
+// está publicado deja de reflejar la realidad. Si eso molesta, la alternativa
+// es no versionarlos y bajarlos del workflow "reportes.yml", que los sube como
+// artifact en cada ejecución manual.
+tasks.register('publicarReportes', Copy) {
+	group = 'verification'
+	description = 'Copia los reportes de pruebas y cobertura a docs/reportes/ (versionado).'
+	dependsOn tasks.named('jacocoTestReport')
+
+	// Se borra primero para que no queden archivos de una corrida anterior:
+	// los nombres de las páginas de JaCoCo dependen de las clases, así que al
+	// renombrar o borrar una clase quedarían huérfanos y confundirían.
+	doFirst {
+		delete layout.projectDirectory.dir('docs/reportes')
+	}
+
+	into layout.projectDirectory.dir('docs/reportes')
+
+	into('pruebas') {
+		from layout.buildDirectory.dir('reports/tests/test')
+	}
+	into('cobertura') {
+		from layout.buildDirectory.dir('reports/jacoco/test/html')
+	}
+
+	doLast {
+		println ''
+		println 'Reportes publicados en docs/reportes/'
+		println '  Pruebas   -> docs/reportes/pruebas/index.html'
+		println '  Cobertura -> docs/reportes/cobertura/index.html'
 		println ''
 	}
 }

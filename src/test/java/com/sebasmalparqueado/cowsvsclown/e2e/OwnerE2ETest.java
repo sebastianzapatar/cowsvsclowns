@@ -20,8 +20,34 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Owner end-to-end tests. They boot the full app with H2 and make
- * real HTTP requests with TestRestTemplate.
+ * Owner end-to-end tests. They boot the full app with H2 and make real HTTP
+ * requests with {@code TestRestTemplate}.
+ *
+ * <p>Nothing is mocked here. A request goes over a real socket, through Tomcat,
+ * the controller, the service, Hibernate and into the database, and the answer
+ * comes back the same way. That is the only level at which some things can be
+ * checked at all — that the layers agree on the JSON, that the transaction
+ * really commits, that the cascade writes the rows it promised.</p>
+ *
+ * <p>They are also the slowest tests in the suite by an order of magnitude, which
+ * is why there are thirty of them rather than two hundred: they cover the happy
+ * path and the handful of errors worth seeing end to end, and the exhaustive
+ * cases live in the unit tests.</p>
+ *
+ * <p>The annotations are doing specific work:</p>
+ *
+ * <ul>
+ *   <li>{@code RANDOM_PORT} starts a real server on a free port, so the tests
+ *       never collide with an app already running on 8080.</li>
+ *   <li>{@code @DirtiesContext(AFTER_EACH_TEST_METHOD)} rebuilds the context
+ *       between methods. Unlike {@code @DataJpaTest} there is no rollback here —
+ *       the writes are committed for real over HTTP — so without this each test
+ *       would inherit the previous one's rows and the duplicate checks would
+ *       start failing depending on execution order.</li>
+ *   <li>{@code @Order} keeps the sequence readable (create, then read, then
+ *       update, then delete) rather than being a dependency between tests: each
+ *       one builds whatever it needs, precisely because the context is reset.</li>
+ * </ul>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
@@ -30,6 +56,11 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class OwnerE2ETest {
 
+    /**
+     * Unlike {@code RestTemplate}, this one does not throw on 4xx/5xx: it hands
+     * back the response so the status can be asserted. That is what makes the
+     * error cases below readable.
+     */
     @Autowired
     private TestRestTemplate rest;
 
@@ -37,6 +68,13 @@ class OwnerE2ETest {
 
     // ============================== POST =================================
 
+    /**
+     * The flagship case for the 1 to N: one request creates the owner and both
+     * cows, and the cascade writes three rows in a single transaction. Nothing
+     * short of an e2e test proves this — the mapper tests show the objects are
+     * wired correctly in memory, but only here does the transaction actually
+     * commit.
+     */
     @Test
     @Order(1)
     @DisplayName("POST /api/owners — 201: creates owner with cows (names as strings)")
@@ -52,7 +90,9 @@ class OwnerE2ETest {
         assertNotNull(response.getBody());
         assertEquals("Sebastián", response.getBody().firstName());
         assertEquals(2, response.getBody().totalCows());
-        // Las vacas vienen como List<String> (solo nombres)
+        // The cows come back as List<String>, just names. Asserted here as well
+        // as in the mapper test because this is the round trip: the shape
+        // survived Jackson serialising it and deserialising it back.
         assertTrue(response.getBody().cows().contains("Lola"));
         assertTrue(response.getBody().cows().contains("Margarita"));
     }

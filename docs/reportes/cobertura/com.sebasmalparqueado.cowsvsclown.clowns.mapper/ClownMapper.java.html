@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ClownMapper.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.clowns.mapper</a> &gt; <span class="el_source">ClownMapper.java</span></div><h1>ClownMapper.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.clowns.mapper;
+
+import com.sebasmalparqueado.cowsvsclown.clowns.dto.ClownRequest;
+import com.sebasmalparqueado.cowsvsclown.clowns.dto.ClownResponse;
+import com.sebasmalparqueado.cowsvsclown.clowns.dto.ClownSummaryResponse;
+import com.sebasmalparqueado.cowsvsclown.clowns.entity.Clown;
+import com.sebasmalparqueado.cowsvsclown.cows.dto.CowSummaryResponse;
+import com.sebasmalparqueado.cowsvsclown.cows.mapper.CowMapper;
+
+import java.util.List;
+
+/**
+ * Translates between the {@link Clown} entity and its DTOs. Same idea as
+ * {@code CowMapper}: utility class, stateless.
+ */
+public final class ClownMapper {
+
+    private ClownMapper() {
+        // Utility class: not instantiated.
+    }
+
+    /**
+     * Builds the clown with its own data.
+     *
+     * &lt;p&gt;The cows from {@code cowIds} are not resolved here: they must be
+     * looked up in the database and verified to exist, and that is the job
+     * of {@code ClownService}.&lt;/p&gt;
+     */
+    public static Clown toEntity(ClownRequest request) {
+<span class="fc bfc" id="L30" title="All 2 branches covered.">        if (request == null) return null;</span>
+<span class="fc" id="L31">        return Clown.builder()</span>
+<span class="fc" id="L32">                .name(request.name())</span>
+<span class="fc" id="L33">                .description(request.description())</span>
+<span class="fc" id="L34">                .active(true)</span>
+<span class="fc" id="L35">                .build();</span>
+    }
+
+    /**
+     * Converts to the full response, with summarized cows.
+     * Must be called within a transaction: {@code getCows()} is LAZY.
+     */
+    public static ClownResponse toResponse(Clown clown) {
+<span class="fc bfc" id="L43" title="All 2 branches covered.">        if (clown == null) return null;</span>
+
+<span class="fc" id="L45">        List&lt;CowSummaryResponse&gt; cows = CowMapper.toActiveSummaries(clown.getCows());</span>
+
+<span class="fc" id="L47">        return new ClownResponse(</span>
+<span class="fc" id="L48">                clown.getId(),</span>
+<span class="fc" id="L49">                clown.getName(),</span>
+<span class="fc" id="L50">                clown.getDescription(),</span>
+<span class="fc" id="L51">                clown.isActive(),</span>
+<span class="fc" id="L52">                cows.size(),</span>
+                cows
+        );
+    }
+
+    /** Short version, for when the clown appears inside a cow. */
+    public static ClownSummaryResponse toSummary(Clown clown) {
+<span class="fc bfc" id="L59" title="All 2 branches covered.">        if (clown == null) return null;</span>
+<span class="fc" id="L60">        return new ClownSummaryResponse(</span>
+<span class="fc" id="L61">                clown.getId(),</span>
+<span class="fc" id="L62">                clown.getName()</span>
+        );
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

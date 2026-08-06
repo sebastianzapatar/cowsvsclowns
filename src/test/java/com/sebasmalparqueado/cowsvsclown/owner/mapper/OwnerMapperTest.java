@@ -15,12 +15,36 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Owner mapper unit tests. Verifies that the list of cows
- * of OwnerResponse comes as List&lt;String&gt; (only names), not as objects.
+ * Owner mapper unit tests.
+ *
+ * <p>These are the cheapest tests in the suite: {@code OwnerMapper} is a class
+ * of static methods with no dependencies, so there is no Spring context and no
+ * mocks — just call and assert. They run in microseconds.</p>
+ *
+ * <p>They are worth having anyway, because the mapper is where two decisions
+ * that the API contract depends on actually live:</p>
+ *
+ * <ul>
+ *   <li><b>It filters soft-deleted cows.</b> The entity holds every cow ever
+ *       assigned, including the ones marked {@code active = false}. Dropping
+ *       them is the mapper's job, and if it stopped doing it the API would start
+ *       handing out deleted data without any query changing.</li>
+ *   <li><b>{@code OwnerResponse.cows()} is a {@code List<String>}</b>, plain
+ *       names rather than objects. That is what keeps the JSON from nesting for
+ *       ever: an owner brings the names of its cows, and each cow brings a
+ *       summary of its owner, so the cycle is cut on this side.</li>
+ * </ul>
+ *
+ * <p>Every method is also checked against {@code null}. The mapper is called
+ * with whatever the repository returns, and a finder that comes back empty would
+ * otherwise turn into a NullPointerException in the middle of a response.</p>
  */
 class OwnerMapperTest {
 
     // ============================== toEntity ==========================================
+    // Inbound direction: DTO -> entity, used when creating.
+
+
 
     @Test
     @DisplayName("toEntity maps name and last name, active = true, without cows")
@@ -48,7 +72,12 @@ class OwnerMapperTest {
         Owner owner = OwnerMapper.toEntity(request);
 
         assertEquals(2, owner.getCows().size());
-        // Each cow has the owner assigned (bidirectional synchronization).
+        // assertSame, not assertEquals: what matters is that every cow points at
+        // *this very instance* of the owner, not at an equal one. That is the
+        // bidirectional sync, and it is what makes the cascade work — the
+        // foreign key owner_id is written from the cow's side, so a cow whose
+        // owner reference is left null fails on insert with a NOT NULL
+        // violation even though the owner was created fine.
         owner.getCows().forEach(cow -> assertSame(owner, cow.getOwner()));
     }
 
@@ -59,6 +88,8 @@ class OwnerMapperTest {
     }
 
     // ============================== toResponse ========================================
+    // Outbound direction: entity -> DTO. This is the one that filters soft-
+    // deleted cows and flattens them down to names.
 
     @Test
     @DisplayName("toResponse returns only the names of active cows")
@@ -81,13 +112,25 @@ class OwnerMapperTest {
         assertEquals(1L, response.id());
         assertEquals("Sebastián", response.firstName());
         assertEquals("Zapata", response.lastName());
+        // fullName is not a column: the entity derives it from the two fields.
         assertEquals("Sebastián Zapata", response.fullName());
         assertTrue(response.active());
-        // Only the active one
+        // The owner holds two cows, one of them soft-deleted. Only the active
+        // one may come out, and totalCows has to agree with the list it
+        // accompanies — a count taken before filtering would report 2 here and
+        // leave the client with a number that does not match what it received.
         assertEquals(1, response.totalCows());
+        // Names, not objects: this is the assertion that pins the shape of the
+        // JSON and keeps the owner-cow-owner nesting from recursing.
         assertEquals(List.of("Lola"), response.cows());
     }
 
+    /**
+     * The edge case of the previous test: when <em>every</em> cow is inactive
+     * the result has to be an empty list, not null. A null here would serialise
+     * the field away and force the client to handle two shapes for the same
+     * thing.
+     */
     @Test
     @DisplayName("toResponse filters inactive cows")
     void toResponse_filtersInactiveCows() {
@@ -114,6 +157,10 @@ class OwnerMapperTest {
     }
 
     // ============================== toSummary =========================================
+    // The reduced version, used when an owner travels *inside* another response
+    // (a cow carrying its owner, for instance). It deliberately does not carry
+    // the cow list: that is exactly what would close the cycle and make the JSON
+    // recurse for ever.
 
     @Test
     @DisplayName("toSummary maps id and full name")

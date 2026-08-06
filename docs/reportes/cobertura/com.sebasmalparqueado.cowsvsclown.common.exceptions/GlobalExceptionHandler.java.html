@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>GlobalExceptionHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.common.exceptions</a> &gt; <span class="el_source">GlobalExceptionHandler.java</span></div><h1>GlobalExceptionHandler.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.common.exceptions;
+
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+/**
+ * Central translator of exceptions into HTTP responses.
+ *
+ * &lt;p&gt;Thanks to this {@code @RestControllerAdvice}, controllers don't need a
+ * single try/catch: they throw the corresponding business exception, and here
+ * the status code and body are decided. All responses are formatted as
+ * {@link ErrorResponse}, so the client always receives the same structure.&lt;/p&gt;
+ *
+ * &lt;p&gt;Spring chooses the most specific handler that applies, which is why
+ * {@code handleUnexpected(Exception)} at the end is only triggered when no other
+ * handler matches.&lt;/p&gt;
+ */
+@RestControllerAdvice
+<span class="fc" id="L34">@Slf4j</span>
+<span class="fc" id="L35">public class GlobalExceptionHandler {</span>
+
+    // ======================= Custom Exceptions ==========================
+
+    /** 404: requested resource is not in the database or was logically deleted. */
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleResourceNotFound(
+            ResourceNotFoundException e, HttpServletRequest request) {
+
+<span class="fc" id="L44">        log.warn(&quot;404 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
+<span class="fc" id="L45">        return build(HttpStatus.NOT_FOUND, e.getMessage(), request);</span>
+    }
+
+    /** 400: business rule violated. */
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleBadRequest(
+            BadRequestException e, HttpServletRequest request) {
+
+<span class="fc" id="L53">        log.warn(&quot;400 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
+<span class="fc" id="L54">        return build(HttpStatus.BAD_REQUEST, e.getMessage(), request);</span>
+    }
+
+    /** 409: conflicts with current state (duplicates, repeated assignments). */
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleConflict(
+            ConflictException e, HttpServletRequest request) {
+
+<span class="fc" id="L62">        log.warn(&quot;409 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
+<span class="fc" id="L63">        return build(HttpStatus.CONFLICT, e.getMessage(), request);</span>
+    }
+
+    // ==================== Request Validation =======================
+
+    /**
+     * 400: failed validation for a {@code @Valid @RequestBody}.
+     *
+     * &lt;p&gt;Returns the map field -&gt; message. The field name is extracted from
+     * {@code getField()}; errors that are not field-specific (class-level
+     * validations) are grouped under the key &quot;object&quot;.&lt;/p&gt;
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleMethodArgumentNotValid(
+            MethodArgumentNotValidException e, HttpServletRequest request) {
+
+<span class="fc" id="L79">        Map&lt;String, String&gt; errors = new LinkedHashMap&lt;&gt;();</span>
+
+<span class="fc" id="L81">        e.getBindingResult().getFieldErrors().forEach(fieldError -&gt;</span>
+                // merge and not put: if a field has two broken rules, the messages
+                // are concatenated instead of losing one.
+<span class="fc" id="L84">                errors.merge(</span>
+<span class="fc" id="L85">                        fieldError.getField(),</span>
+<span class="fc" id="L86">                        String.valueOf(fieldError.getDefaultMessage()),</span>
+<span class="fc" id="L87">                        (oldVal, newVal) -&gt; oldVal + &quot;; &quot; + newVal));</span>
+
+<span class="fc" id="L89">        e.getBindingResult().getGlobalErrors().forEach(globalError -&gt;</span>
+<span class="fc" id="L90">                errors.merge(</span>
+                        &quot;object&quot;,
+<span class="fc" id="L92">                        String.valueOf(globalError.getDefaultMessage()),</span>
+<span class="fc" id="L93">                        (oldVal, newVal) -&gt; oldVal + &quot;; &quot; + newVal));</span>
+
+<span class="fc" id="L95">        log.warn(&quot;Validation failed in {}: {}&quot;, request.getRequestURI(), errors);</span>
+
+<span class="fc" id="L97">        return ResponseEntity</span>
+<span class="fc" id="L98">                .status(HttpStatus.BAD_REQUEST)</span>
+<span class="fc" id="L99">                .body(ErrorResponse.ofValidation(</span>
+                        &quot;There are invalid fields in the request&quot;,
+<span class="fc" id="L101">                        request.getRequestURI(),</span>
+                        errors));
+    }
+
+    /**
+     * 400: failed validation for a single parameter (@PathVariable or
+     * @RequestParam annotated with @Min, @NotBlank, etc.).
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleConstraintViolation(
+            ConstraintViolationException e, HttpServletRequest request) {
+
+<span class="fc" id="L113">        Map&lt;String, String&gt; errors = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L114">        e.getConstraintViolations().forEach(violation -&gt;</span>
+<span class="fc" id="L115">                errors.put(</span>
+<span class="fc" id="L116">                        String.valueOf(violation.getPropertyPath()),</span>
+<span class="fc" id="L117">                        violation.getMessage()));</span>
+
+<span class="fc" id="L119">        log.warn(&quot;Invalid parameters in {}: {}&quot;, request.getRequestURI(), errors);</span>
+
+<span class="fc" id="L121">        return ResponseEntity</span>
+<span class="fc" id="L122">                .status(HttpStatus.BAD_REQUEST)</span>
+<span class="fc" id="L123">                .body(ErrorResponse.ofValidation(</span>
+                        &quot;There are invalid parameters in the request&quot;,
+<span class="fc" id="L125">                        request.getRequestURI(),</span>
+                        errors));
+    }
+
+    /**
+     * 400: the body JSON is malformed or a value cannot be converted to the
+     * expected type (e.g., {@code &quot;weight&quot;: &quot;much&quot;} in an int field).
+     *
+     * &lt;p&gt;{@code e.getMessage()} is not returned because it includes the Java class
+     * and the exact parser position, which is noise for the client.&lt;/p&gt;
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleNotReadable(
+            HttpMessageNotReadableException e, HttpServletRequest request) {
+
+<span class="fc" id="L140">        log.warn(&quot;Unreadable body in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
+<span class="fc" id="L141">        return build(HttpStatus.BAD_REQUEST,</span>
+                &quot;The request body is not valid JSON or a field has an unexpected type&quot;,
+                request);
+    }
+
+    /**
+     * 400: a URL value could not be converted. The typical case here is a
+     * malformed UUID in {@code /api/cows/{id}}.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleTypeMismatch(
+            MethodArgumentTypeMismatchException e, HttpServletRequest request) {
+
+<span class="fc bfc" id="L154" title="All 2 branches covered.">        String expectedType = e.getRequiredType() == null</span>
+<span class="fc" id="L155">                ? &quot;the expected type&quot;</span>
+<span class="fc" id="L156">                : e.getRequiredType().getSimpleName();</span>
+
+<span class="fc" id="L158">        return build(HttpStatus.BAD_REQUEST,</span>
+                &quot;The value '%s' is not valid for the parameter '%s' (expected %s)&quot;
+<span class="fc" id="L160">                        .formatted(e.getValue(), e.getName(), expectedType),</span>
+                request);
+    }
+
+    /** 400: missing a required query param. */
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleMissingParam(
+            MissingServletRequestParameterException e, HttpServletRequest request) {
+
+<span class="fc" id="L169">        return build(HttpStatus.BAD_REQUEST,</span>
+<span class="fc" id="L170">                &quot;Missing required parameter '%s'&quot;.formatted(e.getParameterName()),</span>
+                request);
+    }
+
+    // ========================= Route Errors ============================
+
+    /** 404: the URL does not correspond to any endpoint. */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleNoResourceFound(
+            NoResourceFoundException e, HttpServletRequest request) {
+
+<span class="fc" id="L181">        return build(HttpStatus.NOT_FOUND,</span>
+<span class="fc" id="L182">                &quot;The path %s does not exist in this API&quot;.formatted(request.getRequestURI()),</span>
+                request);
+    }
+
+    /** 405: the route exists but does not accept this HTTP verb. */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleMethodNotSupported(
+            HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
+
+<span class="fc" id="L191">        return build(HttpStatus.METHOD_NOT_ALLOWED,</span>
+                &quot;The %s method is not allowed on this path. Allowed: %s&quot;
+<span class="fc" id="L193">                        .formatted(e.getMethod(), e.getSupportedHttpMethods()),</span>
+                request);
+    }
+
+    // ====================== Database Errors ======================
+
+    /**
+     * 409: the database rejected the operation due to a constraint (unique, NOT NULL,
+     * foreign key).
+     *
+     * &lt;p&gt;This is a safety net: services already validate these cases before
+     * saving, but a concurrent request might sneak in between validation and insert.
+     * The full exception is logged and a generic message is sent to the client,
+     * because Postgres text exposes table names and constraints.&lt;/p&gt;
+     */
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleDataIntegrity(
+            DataIntegrityViolationException e, HttpServletRequest request) {
+
+<span class="fc" id="L212">        log.error(&quot;Integrity violation in {}&quot;, request.getRequestURI(), e);</span>
+<span class="fc" id="L213">        return build(HttpStatus.CONFLICT,</span>
+                &quot;The operation violates a database constraint &quot;
+                        + &quot;(duplicated data or missing reference)&quot;,
+                request);
+    }
+
+    // ======================== Safety Net ============================
+
+    /**
+     * 500: anything unpredicted.
+     *
+     * &lt;p&gt;Logged with full stack trace, and a neutral message is returned to the client:
+     * filtering here prevents a NullPointerException from exposing internal class paths
+     * to the user.&lt;/p&gt;
+     */
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleUnexpected(
+            Exception e, HttpServletRequest request) {
+
+<span class="fc" id="L232">        log.error(&quot;Unhandled error in {}&quot;, request.getRequestURI(), e);</span>
+<span class="fc" id="L233">        return build(HttpStatus.INTERNAL_SERVER_ERROR,</span>
+                &quot;An unexpected server error occurred&quot;,
+                request);
+    }
+
+    // =========================== Utility ===============================
+
+    /** Builds the response so no handler repeats the same block. */
+    private ResponseEntity&lt;ErrorResponse&gt; build(HttpStatus status,
+                                                String message,
+                                                HttpServletRequest request) {
+<span class="fc" id="L244">        return ResponseEntity</span>
+<span class="fc" id="L245">                .status(status)</span>
+<span class="fc" id="L246">                .body(ErrorResponse.of(status, message, request.getRequestURI()));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

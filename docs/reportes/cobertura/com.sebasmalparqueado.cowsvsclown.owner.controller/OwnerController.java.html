@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>OwnerController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.owner.controller</a> &gt; <span class="el_source">OwnerController.java</span></div><h1>OwnerController.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.owner.controller;
+
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.ErrorResponse;
+import com.sebasmalparqueado.cowsvsclown.owner.dto.OwnerRequest;
+import com.sebasmalparqueado.cowsvsclown.owner.dto.OwnerResponse;
+import com.sebasmalparqueado.cowsvsclown.owner.dto.OwnerUpdateRequest;
+import com.sebasmalparqueado.cowsvsclown.owner.service.OwnerService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.net.URI;
+import java.util.List;
+
+/**
+ * Owner endpoints. The owner is the &quot;1&quot; side of the 1 to N relationship with the
+ * cows, so from here you can create an owner with all their cows at once.
+ */
+@RestController
+@RequestMapping(&quot;/api/owners&quot;)
+@RequiredArgsConstructor
+<span class="fc" id="L31">@Slf4j</span>
+@Tag(name = &quot;Owners&quot;, description = &quot;Owner CRUD and &quot; +
+        &quot;cascading creation of their cows (1 to N)&quot;)
+public class OwnerController {
+
+    private final OwnerService ownerService;
+
+    @GetMapping
+    @Operation(
+            summary = &quot;List owners&quot;,
+            description = &quot;Returns all active &quot; +
+                    &quot;owners with their active cows.&quot;
+    )
+    @ApiResponse(responseCode = &quot;200&quot;, description = &quot;List obtained&quot;)
+    public ResponseEntity&lt;List&lt;OwnerResponse&gt;&gt; getAllOwners() {
+<span class="fc" id="L46">        return ResponseEntity.ok(ownerService.getAll());</span>
+    }
+
+    @GetMapping(&quot;/{id}&quot;)
+    @Operation(summary = &quot;Find an owner by id&quot;)
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;,
+                    description = &quot;Owner found&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;,
+                    description = &quot;Owner does not exist&quot;,
+                    content =
+                    @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;OwnerResponse&gt; getOwnerById(
+            @Parameter(description = &quot;Owner id&quot;) @PathVariable Long id) {
+
+<span class="fc" id="L62">        return ResponseEntity.ok(ownerService.getById(id));</span>
+    }
+
+    @PostMapping
+    @Operation(
+            summary = &quot;Create an owner&quot;,
+            description = &quot;&quot;&quot;
+                    If the request brings the &quot;cows&quot; list, those cows are created together
+                    with the owner in the same transaction: this is the cascading 1 to N
+                    insertion. If it is not provided, the owner is created alone and the cows are
+                    added later with POST /api/cows.
+                    &quot;&quot;&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;201&quot;, description = &quot;Owner created&quot;),
+            @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid data&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;409&quot;,
+                    description = &quot;Owner already exists, or a cow repeats a name&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;OwnerResponse&gt; createOwner(@Valid @RequestBody OwnerRequest request) {
+<span class="fc" id="L84">        OwnerResponse created = ownerService.create(request);</span>
+
+<span class="fc" id="L86">        return ResponseEntity</span>
+<span class="fc" id="L87">                .created(URI.create(&quot;/api/owners/&quot; + created.id()))</span>
+<span class="fc" id="L88">                .body(created);</span>
+    }
+
+    @PatchMapping(&quot;/{id}&quot;)
+    @Operation(
+            summary = &quot;Modify an owner&quot;,
+            description = &quot;Only changes the fields that are sent; those not provided are left unchanged.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Owner updated&quot;),
+            @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid data or empty request&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Owner does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;409&quot;, description = &quot;There is already another owner with that name&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;OwnerResponse&gt; updateOwner(
+            @Parameter(description = &quot;Owner id&quot;) @PathVariable Long id,
+            @Valid @RequestBody OwnerUpdateRequest request) {
+
+<span class="fc" id="L109">        return ResponseEntity.ok(ownerService.update(id, request));</span>
+    }
+
+    @DeleteMapping(&quot;/{id}&quot;)
+    @Operation(
+            summary = &quot;Logically delete an owner&quot;,
+            description = &quot;Logical delete. Their cows are also deactivated, because &quot;
+                    + &quot;the owner_id column is mandatory and they cannot be left without an owner. &quot;
+                    + &quot;To keep them they must be transferred beforehand with &quot;
+                    + &quot;PATCH /api/cows/{id}/owner/{ownerId}.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;204&quot;, description = &quot;Owner logically deleted&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Owner does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;Void&gt; deleteOwner(
+            @Parameter(description = &quot;Owner id&quot;) @PathVariable Long id) {
+
+<span class="fc" id="L128">        ownerService.softDelete(id);</span>
+<span class="fc" id="L129">        return ResponseEntity.noContent().build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

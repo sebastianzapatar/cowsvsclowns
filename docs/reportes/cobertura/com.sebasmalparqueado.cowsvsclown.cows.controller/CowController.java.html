@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CowController.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.cows.controller</a> &gt; <span class="el_source">CowController.java</span></div><h1>CowController.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.cows.controller;
+
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.ErrorResponse;
+import com.sebasmalparqueado.cowsvsclown.cows.dto.CowRequest;
+import com.sebasmalparqueado.cowsvsclown.cows.dto.CowResponse;
+import com.sebasmalparqueado.cowsvsclown.cows.dto.CowUpdateRequest;
+import com.sebasmalparqueado.cowsvsclown.cows.service.CowService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+import java.net.URI;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * Cow endpoints.
+ *
+ * &lt;p&gt;The controller has no logic: it receives the request, passes it to the service
+ * and translates the result into an HTTP status code. It also has no try/catch:
+ * errors are handled by {@code GlobalExceptionHandler}.&lt;/p&gt;
+ */
+@RestController
+@RequestMapping(&quot;/api/cows&quot;)
+@RequiredArgsConstructor
+<span class="fc" id="L37">@Slf4j</span>
+@Validated // enables validation on independent parameters (e.g. @NotBlank below)
+@Tag(name = &quot;Cows&quot;, description = &quot;Cow CRUD and owner management (1 to N relationship)&quot;)
+public class CowController {
+
+    private final CowService cowService;
+
+    @GetMapping
+    @Operation(
+            summary = &quot;List cows&quot;,
+            description = &quot;Returns all active cows with their owner and clowns. &quot;
+                    + &quot;Logically deleted ones do not appear.&quot;
+    )
+    @ApiResponse(responseCode = &quot;200&quot;, description = &quot;List obtained&quot;)
+    public ResponseEntity&lt;List&lt;CowResponse&gt;&gt; getAllCows() {
+<span class="fc" id="L52">        return ResponseEntity.ok(cowService.getCows());</span>
+    }
+
+    @GetMapping(&quot;/{id}&quot;)
+    @Operation(summary = &quot;Find a cow by id&quot;)
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Cow found&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Cow does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;CowResponse&gt; getCowById(
+            @Parameter(description = &quot;Cow id&quot;) @PathVariable UUID id) {
+
+<span class="fc" id="L65">        return ResponseEntity.ok(cowService.getById(id));</span>
+    }
+
+    @GetMapping(&quot;/search&quot;)
+    @Operation(
+            summary = &quot;Find a cow by exact name&quot;,
+            description = &quot;Uses the native SQL query from the repository. &quot;
+                    + &quot;Case-insensitive.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Cow found&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;There is no cow with that name&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;CowResponse&gt; getCowByName(
+            @Parameter(description = &quot;Exact name of the cow&quot;, example = &quot;Lola&quot;)
+            @RequestParam @NotBlank(message = &quot;the search name cannot be empty&quot;)
+            String name) {
+
+<span class="fc" id="L84">        return ResponseEntity.ok(cowService.getByName(name));</span>
+    }
+
+    @GetMapping(&quot;/owner/{ownerId}&quot;)
+    @Operation(
+            summary = &quot;List cows of an owner&quot;,
+            description = &quot;This is the N side of the 1 to N relationship, queried from the cow.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;List obtained&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Owner does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;List&lt;CowResponse&gt;&gt; getCowsByOwner(
+            @Parameter(description = &quot;Owner id&quot;) @PathVariable Long ownerId) {
+
+<span class="fc" id="L100">        return ResponseEntity.ok(cowService.getByOwner(ownerId));</span>
+    }
+
+    @PostMapping
+    @Operation(
+            summary = &quot;Create a cow&quot;,
+            description = &quot;&quot;&quot;
+                    Resolves both relationships at once:
+                    - ownerId (mandatory) creates the 1 to N link with the owner.
+                    - clownIds (optional) creates the N to M links with the clowns.
+                    &quot;&quot;&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;201&quot;, description = &quot;Cow created&quot;),
+            @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid data&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Owner or some clown does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;409&quot;, description = &quot;There is already a cow with that name&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;CowResponse&gt; createCow(@Valid @RequestBody CowRequest request) {
+<span class="fc" id="L122">        CowResponse created = cowService.create(request);</span>
+
+        // 201 + Location header with the URL of the new resource: this is
+        // the proper REST way for a POST that creates something.
+<span class="fc" id="L126">        return ResponseEntity</span>
+<span class="fc" id="L127">                .created(URI.create(&quot;/api/cows/&quot; + created.id()))</span>
+<span class="fc" id="L128">                .body(created);</span>
+    }
+
+    @PatchMapping(&quot;/{id}&quot;)
+    @Operation(
+            summary = &quot;Modify a cow&quot;,
+            description = &quot;Only changes the fields that are sent; those not provided are left unchanged.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Cow updated&quot;),
+            @ApiResponse(responseCode = &quot;400&quot;, description = &quot;Invalid data or empty request&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Cow does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;409&quot;, description = &quot;There is already another cow with that name&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;CowResponse&gt; updateCow(
+            @Parameter(description = &quot;Cow id&quot;) @PathVariable UUID id,
+            @Valid @RequestBody CowUpdateRequest request) {
+
+        /*
+         * It's 200 and not 206. 206 (Partial Content) is for responses that
+         * bring only a piece of the resource, like a range download; it has
+         * nothing to do with a partial update.
+         */
+<span class="fc" id="L154">        return ResponseEntity.ok(cowService.update(id, request));</span>
+    }
+
+    @PatchMapping(&quot;/{id}/owner/{ownerId}&quot;)
+    @Operation(
+            summary = &quot;Change the owner of a cow&quot;,
+            description = &quot;1 to N relationship: moves the cow from one owner to another &quot;
+                    + &quot;by updating the owner_id column.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;200&quot;, description = &quot;Owner changed&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Cow or owner does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = &quot;409&quot;, description = &quot;The cow already belonged to that owner&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;CowResponse&gt; changeOwner(
+            @Parameter(description = &quot;Cow id&quot;) @PathVariable UUID id,
+            @Parameter(description = &quot;New owner id&quot;) @PathVariable Long ownerId) {
+
+<span class="fc" id="L174">        return ResponseEntity.ok(cowService.changeOwner(id, ownerId));</span>
+    }
+
+    @DeleteMapping(&quot;/{id}&quot;)
+    @Operation(
+            summary = &quot;Logically delete a cow&quot;,
+            description = &quot;Logical delete: the row is not deleted, it is marked active = false &quot;
+                    + &quot;and stops appearing in queries.&quot;
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = &quot;204&quot;, description = &quot;Cow deleted&quot;),
+            @ApiResponse(responseCode = &quot;404&quot;, description = &quot;Cow does not exist&quot;,
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity&lt;Void&gt; deleteCow(
+            @Parameter(description = &quot;Cow id&quot;) @PathVariable UUID id) {
+
+<span class="fc" id="L191">        cowService.softDelete(id);</span>
+        // 204 No Content: the operation succeeded and there is no body to return.
+<span class="fc" id="L193">        return ResponseEntity.noContent().build();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

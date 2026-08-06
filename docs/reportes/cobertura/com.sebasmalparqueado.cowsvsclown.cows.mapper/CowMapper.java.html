@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>CowMapper.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.cows.mapper</a> &gt; <span class="el_source">CowMapper.java</span></div><h1>CowMapper.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.cows.mapper;
+
+import com.sebasmalparqueado.cowsvsclown.clowns.mapper.ClownMapper;
+import com.sebasmalparqueado.cowsvsclown.cows.dto.CowRequest;
+import com.sebasmalparqueado.cowsvsclown.cows.dto.CowResponse;
+import com.sebasmalparqueado.cowsvsclown.cows.dto.CowSummaryResponse;
+import com.sebasmalparqueado.cowsvsclown.cows.entity.Cow;
+import com.sebasmalparqueado.cowsvsclown.owner.dto.OwnerCowRequest;
+import com.sebasmalparqueado.cowsvsclown.owner.mapper.OwnerMapper;
+
+import java.util.List;
+
+/**
+ * Translates between the {@link Cow} entity and its DTOs.
+ *
+ * &lt;p&gt;The reason this layer exists: the entity has lazy relationships and
+ * circular references (cow -&gt; clowns -&gt; cows). If the controller returned
+ * the entity directly, Jackson would traverse those references and produce an
+ * infinite JSON, as well as trigger queries outside the transaction.&lt;/p&gt;
+ *
+ * &lt;p&gt;It is a utility class: private constructor and static methods, it's not
+ * a Spring bean because it doesn't need to inject anything.&lt;/p&gt;
+ */
+public final class CowMapper {
+
+    private CowMapper() {
+        // Utility class: not instantiated.
+    }
+
+    /**
+     * Builds the entity with the cow's own data.
+     *
+     * &lt;p&gt;The owner and clowns are NOT resolved here: they are entities that must
+     * be fetched from the database, and the mapper doesn't have repositories.
+     * {@code CowService} takes care of that, as it can validate they exist.&lt;/p&gt;
+     */
+    public static Cow toEntity(CowRequest request) {
+<span class="fc bfc" id="L38" title="All 2 branches covered.">        if (request == null) return null;</span>
+<span class="fc" id="L39">        return Cow.builder()</span>
+<span class="fc" id="L40">                .name(request.name())</span>
+<span class="fc" id="L41">                .weight(request.weight())</span>
+<span class="fc" id="L42">                .milkperday(request.milkperday())</span>
+<span class="fc" id="L43">                .active(true)</span>
+<span class="fc" id="L44">                .build();</span>
+    }
+
+    /** Same as above, for cows that arrive nested in an owner. */
+    public static Cow toEntity(OwnerCowRequest request) {
+<span class="fc bfc" id="L49" title="All 2 branches covered.">        if (request == null) return null;</span>
+<span class="fc" id="L50">        return Cow.builder()</span>
+<span class="fc" id="L51">                .name(request.name())</span>
+<span class="fc" id="L52">                .weight(request.weight())</span>
+<span class="fc" id="L53">                .milkperday(request.milkperday())</span>
+<span class="fc" id="L54">                .active(true)</span>
+<span class="fc" id="L55">                .build();</span>
+    }
+
+    /**
+     * Converts the entity into the full response.
+     *
+     * &lt;p&gt;Warning: must be called &lt;b&gt;inside&lt;/b&gt; the transaction, because here
+     * {@code getOwner()} and {@code getClowns()} are accessed, which are LAZY. If
+     * called after closed, Hibernate would throw LazyInitializationException.&lt;/p&gt;
+     */
+    public static CowResponse toResponse(Cow cow) {
+<span class="fc bfc" id="L66" title="All 2 branches covered.">        if (cow == null) return null;</span>
+<span class="fc" id="L67">        return new CowResponse(</span>
+<span class="fc" id="L68">                cow.getId(),</span>
+<span class="fc" id="L69">                cow.getName(),</span>
+<span class="fc" id="L70">                cow.getWeight(),</span>
+<span class="fc" id="L71">                cow.getMilkperday(),</span>
+<span class="fc" id="L72">                cow.isActive(),</span>
+<span class="fc" id="L73">                OwnerMapper.toSummary(cow.getOwner()),</span>
+                // Only active clowns are shown: logically deleted ones
+                // remain in the join table but are not exposed.
+<span class="fc" id="L76">                cow.getClowns().stream()</span>
+<span class="fc" id="L77">                        .filter(clown -&gt; clown.isActive())</span>
+<span class="fc" id="L78">                        .map(ClownMapper::toSummary)</span>
+<span class="fc" id="L79">                        .toList()</span>
+        );
+    }
+
+    /** Short version, for when the cow appears inside an owner or clown. */
+    public static CowSummaryResponse toSummary(Cow cow) {
+<span class="fc bfc" id="L85" title="All 2 branches covered.">        if (cow == null) return null;</span>
+<span class="fc" id="L86">        return new CowSummaryResponse(</span>
+<span class="fc" id="L87">                cow.getId(),</span>
+<span class="fc" id="L88">                cow.getName(),</span>
+<span class="fc" id="L89">                cow.getMilkperday()</span>
+        );
+    }
+
+    /** Converts a full list, skipping logically deleted cows. */
+    public static List&lt;CowSummaryResponse&gt; toActiveSummaries(List&lt;Cow&gt; cows) {
+<span class="fc bfc" id="L95" title="All 2 branches covered.">        if (cows == null) return List.of();</span>
+<span class="fc" id="L96">        return cows.stream()</span>
+<span class="fc" id="L97">                .filter(Cow::isActive)</span>
+<span class="fc" id="L98">                .map(CowMapper::toSummary)</span>
+<span class="fc" id="L99">                .toList();</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

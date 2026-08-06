@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>ResourceNotFoundException.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.common.exceptions</a> &gt; <span class="el_source">ResourceNotFoundException.java</span></div><h1>ResourceNotFoundException.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.common.exceptions;
+
+/**
+ * The requested resource does not exist (or has been logically deleted). Translates to a 404.
+ *
+ * &lt;p&gt;It is intentionally a RuntimeException: by being unchecked, it does not force filling
+ * service signatures with {@code throws}, and Spring automatically rolls back
+ * the transaction when it is thrown.&lt;/p&gt;
+ */
+public class ResourceNotFoundException extends RuntimeException {
+
+    public ResourceNotFoundException(String message) {
+<span class="fc" id="L13">        super(message);</span>
+<span class="fc" id="L14">    }</span>
+
+    /**
+     * Shortcut for the typical message: &quot;There is no Cow with id X&quot;.
+     *
+     * @param resource entity name, e.g., &quot;Cow&quot;
+     * @param id       identifier that was searched
+     */
+    public static ResourceNotFoundException of(String resource, Object id) {
+<span class="fc" id="L23">        return new ResourceNotFoundException(</span>
+<span class="fc" id="L24">                &quot;There is no %s with id %s&quot;.formatted(resource, id));</span>
+    }
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>
