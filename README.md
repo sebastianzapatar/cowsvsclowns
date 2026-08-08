@@ -21,13 +21,14 @@ las filas de `clown_cow`, que solo representan un vínculo.
 3. [Puesta en marcha](#puesta-en-marcha)
 4. [Perfiles de configuración](#perfiles-de-configuración)
 5. [Documentación de la API](#documentación-de-la-api)
-6. [Endpoints](#endpoints)
-7. [Modelo de datos](#modelo-de-datos)
-8. [Manejo de errores](#manejo-de-errores)
-9. [Tests y cobertura](#tests-y-cobertura)
-10. [CI/CD](#cicd)
-11. [Estructura del proyecto](#estructura-del-proyecto)
-12. [Comandos de referencia](#comandos-de-referencia)
+6. [Seguridad y login con Keycloak](#seguridad-y-login-con-keycloak)
+7. [Endpoints](#endpoints)
+8. [Modelo de datos](#modelo-de-datos)
+9. [Manejo de errores](#manejo-de-errores)
+10. [Tests y cobertura](#tests-y-cobertura)
+11. [CI/CD](#cicd)
+12. [Estructura del proyecto](#estructura-del-proyecto)
+13. [Comandos de referencia](#comandos-de-referencia)
 
 ---
 
@@ -37,6 +38,8 @@ las filas de `clown_cow`, que solo representan un vínculo.
 |---|---|---|
 | Java | 25 | Toolchain fijado en `build.gradle` |
 | Spring Boot | 4.1.0 | Web MVC, Data JPA, Validation, Actuator |
+| Spring Security | 7.1 | OAuth2 Resource Server: valida los tokens JWT |
+| Keycloak | 26.7 | Servidor de identidad: usuarios, contraseñas y roles |
 | Gradle | 9.5.1 | Wrapper incluido, no hace falta instalarlo |
 | PostgreSQL | 15-alpine | Base de datos en Docker |
 | H2 | en memoria | Base de datos de los tests |
@@ -65,7 +68,26 @@ cp .env.template .env      # y completa los valores
 docker compose up -d
 ```
 
-Eso levanta Postgres y la app. La API queda en `http://localhost:8080`.
+Eso levanta tres contenedores:
+
+| Servicio | URL | Qué es |
+|---|---|---|
+| `app` | http://localhost:8080 | La API |
+| `keycloak` | http://localhost:8081 | Login y roles (consola: `admin` / `admin`) |
+| `db` | `localhost:5432` | Postgres |
+
+> **El puerto 8080 tiene que estar libre.** Si otro contenedor o proceso ya lo
+> ocupa, la app falla al arrancar con `Bind for 0.0.0.0:8080 failed: port is
+> already allocated`. Se ve con `lsof -nP -iTCP:8080 -sTCP:LISTEN`.
+
+La primera vez Keycloak tarda entre 20 y 40 segundos: además de arrancar tiene
+que importar el realm. La app **no** lo espera (arranca igual y responde los
+`GET`), pero pedir un token antes de que termine da error de conexión. Se ve
+cuándo está listo con:
+
+```bash
+docker compose logs -f keycloak    # termina con "Realm 'cowsvsclown' imported"
+```
 
 No hace falta `--build`: el `compose.yml` tiene `pull_policy: build`, así que
 reconstruye la imagen en cada `up` sin que tengas que borrar nada a mano.
@@ -83,9 +105,13 @@ Los datos viven en el volumen `postgres_data`, que **no** se borra con `down`.
 Útil para depurar con breakpoints:
 
 ```bash
-docker compose up -d db      # solo Postgres
-./gradlew bootRun            # la app usa el perfil "dev" por defecto
+docker compose up -d db keycloak   # Postgres y Keycloak
+./gradlew bootRun                  # la app usa el perfil "dev" por defecto
 ```
+
+Keycloak hace falta también acá: sin él la app arranca, pero no hay forma de
+conseguir un token y todo lo que escribe responde `401`. En el perfil `dev` la
+app lo busca en `http://localhost:8081`, que es donde lo publica el compose.
 
 ### Variables de entorno
 
@@ -98,10 +124,25 @@ Las lee Compose del archivo `.env` (que no va al repositorio). La plantilla
 | `DB_USER` | `postgres` | |
 | `DB_PASSWORD` | `changeme` | Usa algo fuerte fuera de desarrollo |
 | `DB_PORT` | `5432` | Puerto de **tu máquina**, no el del contenedor |
+| `KEYCLOAK_PORT` | `8081` | Puerto de **tu máquina** para Keycloak |
+| `KEYCLOAK_ADMIN_USER` | `admin` | Administrador de la consola de Keycloak |
+| `KEYCLOAK_ADMIN_PASSWORD` | `admin` | Ídem. Nunca así fuera de desarrollo |
+| `KEYCLOAK_REALM` | `cowsvsclown` | Debe coincidir con el `realm` del JSON |
+| `KEYCLOAK_CLIENT_ID` | `cowsvsclown-api` | Debe coincidir con el `clientId` del JSON |
 
 `DB_PORT` solo cambia por dónde entras tú (DBeaver, psql). Dentro de la red de
 Docker los contenedores siempre se hablan por el 5432. Si ya tienes un Postgres
 local ocupando el 5432, pon `5433` aquí.
+
+`KEYCLOAK_PORT` sí es distinto: cambiarlo cambia el emisor (`iss`) que Keycloak
+escribe dentro de cada token, porque `compose.yml` construye con él la URL
+pública del realm. Es coherente —la app valida contra esa misma URL— pero los
+tokens pedidos antes del cambio dejan de servir.
+
+`KEYCLOAK_REALM` y `KEYCLOAK_CLIENT_ID` no crean nada: nombran lo que ya está
+dentro de `keycloak/realm-cowsvsclown.json`. Si no coinciden letra por letra, la
+app busca las llaves de un realm que no existe y **todo lo protegido responde
+401**.
 
 ---
 
@@ -109,11 +150,11 @@ local ocupando el 5432, pon `5433` aquí.
 
 `application.yml` se carga siempre y encima se aplica el perfil activo.
 
-| Perfil | Cuándo se activa | Base de datos |
-|---|---|---|
-| `dev` | Por defecto | Postgres en `localhost` |
-| `docker` | `SPRING_PROFILES_ACTIVE=docker` (lo pone `compose.yml`) | Postgres en el host `db` |
-| `test` | `@ActiveProfiles("test")` en los tests | H2 en memoria, `create-drop` |
+| Perfil | Cuándo se activa | Base de datos | Keycloak |
+|---|---|---|---|
+| `dev` | Por defecto | Postgres en `localhost` | `localhost:8081` |
+| `docker` | `SPRING_PROFILES_ACTIVE=docker` (lo pone `compose.yml`) | Postgres en el host `db` | llaves por `keycloak:8080`, emisor `localhost:8081` |
+| `test` | `@ActiveProfiles("test")` en los tests | H2 en memoria, `create-drop` | ninguno: se reemplaza el decodificador |
 
 En `dev` y `docker` se usa `ddl-auto: update`, que ajusta las tablas a las
 entidades en cada arranque sin borrar datos.
@@ -139,7 +180,8 @@ Con la app corriendo:
 
 Swagger se genera solo, leyendo los controllers y los DTO. `OpenApiConfig` solo
 agrega los datos generales (título, versión, contacto) que no se pueden deducir
-del código.
+del código, más los dos esquemas de autenticación del botón **Authorize** 🔓:
+entrar por Keycloak, o pegar un token a mano.
 
 De Actuator se expone únicamente `/health`: el resto de endpoints (`env`,
 `beans`, `mappings`) muestran configuración interna y no tienen por qué estar
@@ -147,7 +189,206 @@ publicados.
 
 ---
 
+## Seguridad y login con Keycloak
+
+**Consultar es público. Crear, modificar y borrar exige un token.**
+
+### El modelo en una frase
+
+La API **no tiene login**: ni formulario, ni tabla de usuarios, ni contraseñas.
+De eso se encarga Keycloak. La API solo recibe un token (un JWT), comprueba que
+sea auténtico y mira qué roles trae adentro para decidir si deja pasar la
+operación. En la jerga de OAuth2, la API es un *resource server* y Keycloak es
+el *authorization server*.
+
+```
+ ┌──────────┐   1. usuario y contraseña   ┌────────────┐
+ │ Vos      │ ──────────────────────────► │  Keycloak  │
+ │ (Swagger │ ◄────────────────────────── │   :8081    │
+ │  o curl) │   2. te devuelve un JWT     └────────────┘
+ └────┬─────┘                                    ▲
+      │                                          │ 4. baja las llaves
+      │ 3. Authorization: Bearer <JWT>           │    públicas UNA vez
+      ▼                                          │    y las cachea
+ ┌────────────┐                                  │
+ │ Cows API   │ ─────────────────────────────────┘
+ │   :8080    │  5. valida firma + vencimiento + emisor
+ └────────────┘  6. lee los roles y aplica las reglas
+```
+
+El paso 4 es lo importante: la API se baja las llaves públicas del realm **una
+sola vez** y después valida todos los tokens sola, sin una llamada de red por
+petición y sin depender de que Keycloak esté disponible. El precio es que un
+token vale hasta que vence aunque al usuario lo deshabiliten mientras tanto; por
+eso duran 5 minutos.
+
+### Quién puede hacer qué
+
+| Método | Ruta | Rol necesario |
+|---|---|---|
+| `GET` | `/api/**` | ninguno, ni siquiera token |
+| `POST` | `/api/**` | `USER` o `ADMIN` |
+| `PATCH` / `PUT` | `/api/**` | `USER` o `ADMIN` |
+| `DELETE` | `/api/clowns/{id}/cows/{cowId}` | `USER` o `ADMIN` |
+| `DELETE` | `/api/**` (el resto) | solo `ADMIN` |
+| `GET` | `/swagger-ui/**`, `/v3/api-docs/**`, `/actuator/health` | ninguno |
+
+Los dos `DELETE` están separados porque no son la misma operación: quitarle una
+vaca a un payaso solo rompe un vínculo de la tabla intermedia y se deshace
+volviendo a asignarla, mientras que borrar una vaca da de baja el registro
+entero.
+
+Las reglas están todas en un único archivo, `common/config/SecurityConfig.java`,
+y terminan con `anyRequest().authenticated()`: cualquier ruta nueva queda
+protegida por omisión, no abierta.
+
+### Usuarios de prueba
+
+Vienen creados en el realm, no hay que registrarlos:
+
+| Usuario | Contraseña | Roles | Para probar |
+|---|---|---|---|
+| `admin` | `admin123` | `ADMIN`, `USER` | Que todo funcione |
+| `user` | `user123` | `USER` | Que un `DELETE` dé **403** |
+| `curioso` | `curioso123` | ninguno | Que hasta un `POST` dé **403** |
+
+`curioso` es el caso que aclara la diferencia entre los dos códigos: su token es
+válido, así que **no** da 401. Da 403.
+
+| Código | Significa | Cuándo |
+|---|---|---|
+| `401` | "No sé quién sos" | Falta el token, o está vencido, mal firmado o es de otro realm |
+| `403` | "Sé quién sos y no podés" | El token es válido pero al usuario le falta el rol |
+
+### Probarlo desde Swagger
+
+<http://localhost:8080/swagger-ui.html> → botón **Authorize** 🔓 → te lleva a la
+pantalla de Keycloak → entrás con `admin` / `admin123`. A partir de ahí Swagger
+adjunta el token en cada petición.
+
+### Probarlo desde la terminal
+
+```bash
+# 1) Pedir el token
+TOKEN=$(curl -s -X POST \
+  "http://localhost:8081/realms/cowsvsclown/protocol/openid-connect/token" \
+  -d "client_id=cowsvsclown-api" \
+  -d "username=admin" \
+  -d "password=admin123" \
+  -d "grant_type=password" | jq -r .access_token)
+
+# 2) Usarlo
+curl -X POST http://localhost:8080/api/owners \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"firstName":"Ada","lastName":"Lovelace"}'
+```
+
+Comprobaciones rápidas de que la protección está viva:
+
+```bash
+curl -i http://localhost:8080/api/owners                      # 200, sin token
+curl -i -X POST http://localhost:8080/api/owners \
+     -H 'Content-Type: application/json' -d '{}'              # 401
+```
+
+### Qué hay dentro del token
+
+Un JWT son tres partes separadas por puntos: `cabecera.contenido.firma`, en
+Base64. **No está cifrado**: cualquiera lo puede leer. Lo que no puede es
+modificarlo sin romper la firma.
+
+```bash
+echo $TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq
+```
+
+```jsonc
+{
+  "iss": "http://localhost:8081/realms/cowsvsclown",  // quién lo emitió
+  "aud": "cowsvsclown-api",                           // para quién es
+  "exp": 1735689600,                                  // cuándo vence
+  "preferred_username": "admin",
+  "realm_access": { "roles": ["ADMIN", "USER"] }      // <-- lo que lee la API
+}
+```
+
+### Las dos piezas de código que hubo que escribir
+
+Casi todo lo hace Spring Boot solo a partir de dos propiedades en
+`application.yml`. Solo dos cosas necesitaron código:
+
+1. **`common/security/KeycloakRoleConverter.java`** — Spring Security **no sabe
+   leer los roles de Keycloak**. Su conversor de fábrica solo mira el claim
+   `scope`, y los roles de Keycloak están en `realm_access.roles`. Sin esta
+   clase, un usuario con rol `ADMIN` llega autenticado pero *sin ninguna
+   autoridad*, y cualquier regla lo rechaza. El síntoma es el clásico "el token
+   es válido pero siempre me da 403".
+
+2. **`common/security/RestAuthenticationEntryPoint.java`** y
+   **`RestAccessDeniedHandler.java`** — los rechazos ocurren en la cadena de
+   filtros, *antes* del `DispatcherServlet`, así que el `GlobalExceptionHandler`
+   ni se entera y los 401/403 saldrían con un formato distinto al resto de la
+   API. Estas dos clases reinyectan la excepción en Spring MVC para que el
+   cuerpo lo arme el mismo sitio que todos los demás errores:
+
+   ```json
+   {
+     "status": 401,
+     "error": "Unauthorized",
+     "message": "A valid access token is required to use this endpoint",
+     "path": "/api/owners",
+     "timestamp": "2026-08-07T20:27:19.501"
+   }
+   ```
+
+### El error clásico: dos URLs, no una
+
+En `application.yml` hay **dos** direcciones del mismo realm, y no es un
+copy-paste mal hecho:
+
+| Propiedad | Valor en Docker | Quién la usa |
+|---|---|---|
+| `issuer-uri` | `http://localhost:8081/realms/cowsvsclown` | Nadie la llama: solo se **compara** con el claim `iss` del token |
+| `jwk-set-uri` | `http://keycloak:8080/realms/.../certs` | La **llama la app** para bajarse las llaves públicas |
+
+El token lo pedís vos desde el navegador, así que dentro dice
+`localhost:8081`. Pero el contenedor de la app no tiene ningún Keycloak en su
+`localhost`: para él está en `keycloak:8080`. Poner las dos iguales rompe de una
+de estas dos formas:
+
+* **las dos internas** → `The iss claim is not valid`, un 401 con un token bueno
+* **las dos públicas** → `Connection refused` al bajar las llaves
+
+### Cambiar la configuración de Keycloak
+
+Todo el realm (cliente, roles, usuarios) está en
+[`keycloak/realm-cowsvsclown.json`](keycloak/realm-cowsvsclown.json) y se importa
+solo al levantar. Para que un cambio quede versionado, editás el JSON y:
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+No hace falta `-v`: en modo `start-dev` Keycloak guarda todo en una base H2 que
+vive **dentro del contenedor**, no en un volumen, así que al recrearlo nace
+vacía y el realm se importa de nuevo. La base de Postgres sí es un volumen, o
+sea que las vacas siguen ahí.
+
+El reverso de esa moneda: **lo que toques por la consola web se pierde en el
+siguiente `down`**. Si querés que un usuario o un rol sobreviva, tiene que estar
+en el JSON.
+
+La explicación bloque por bloque del realm —y por qué cada opción está como
+está— vive en [`keycloak/README.md`](keycloak/README.md), porque JSON no admite
+comentarios.
+
+---
+
 ## Endpoints
+
+Los `GET` son públicos; todo lo demás pide token. Qué rol hace falta en cada
+caso está en [Seguridad y login con Keycloak](#seguridad-y-login-con-keycloak).
 
 ### Vacas — `/api/cows`
 
@@ -191,6 +432,7 @@ Crear una vaca resolviendo las dos relaciones en la misma llamada:
 
 ```bash
 curl -X POST http://localhost:8080/api/cows \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
         "name": "Lola",
@@ -200,6 +442,10 @@ curl -X POST http://localhost:8080/api/cows \
         "clownIds": ["3fa85f64-5717-4562-b3fc-2c963f66afa6"]
       }'
 ```
+
+`$TOKEN` sale del `curl` a Keycloak que está en
+[Seguridad](#probarlo-desde-la-terminal). Sin esa cabecera, la respuesta es
+`401`.
 
 `ownerId` es obligatorio (la columna `owner_id` es `NOT NULL`); `clownIds` es
 opcional y cada id crea una fila en `clown_cow`.
@@ -279,6 +525,8 @@ por campo. En los demás errores el campo **no aparece** en el JSON, gracias a
 | `400` | JSON malformado o campo con tipo raro | `HttpMessageNotReadableException` |
 | `400` | UUID o número malformado en la URL | `MethodArgumentTypeMismatchException` |
 | `400` | Falta un query param obligatorio | `MissingServletRequestParameterException` |
+| `401` | Falta el token, o está vencido, mal firmado o es de otro realm | `AuthenticationException` |
+| `403` | El token es válido pero al usuario le falta el rol | `AccessDeniedException` |
 | `404` | El recurso no existe o fue dado de baja | `ResourceNotFoundException` |
 | `404` | La ruta no corresponde a ningún endpoint | `NoResourceFoundException` |
 | `405` | La ruta existe pero no acepta ese verbo | `HttpRequestMethodNotSupportedException` |
@@ -291,21 +539,45 @@ completa se registra en el log, pero al cliente se le manda un mensaje neutro.
 El texto de Postgres expone nombres de tablas y constraints, y una
 `NullPointerException` expondría rutas de clases internas.
 
+El `401` y el `403` son un caso aparte: los produce la cadena de filtros de
+Spring Security, *antes* de que la petición llegue al `DispatcherServlet`, así
+que el `GlobalExceptionHandler` nunca se enteraría por su cuenta.
+`RestAuthenticationEntryPoint` y `RestAccessDeniedHandler` reinyectan la
+excepción en Spring MVC justamente para que el cuerpo lo arme el mismo sitio que
+todos los demás errores y el cliente reciba siempre la misma forma de JSON.
+
+El mensaje del `401` tampoco dice si el token venció, si está mal firmado o si
+es de otro emisor: esa distinción solo le sirve a quien está tanteando la API.
+El motivo real queda en el log.
+
 ---
 
 ## Tests y cobertura
 
-**196 tests** en 20 archivos, todos en verde.
+**241 tests** en 23 archivos, todos en verde.
 
 | Tipo | Tests | Archivos | Qué prueban |
 |---|---:|---:|---|
-| Unitarias | 108 | 9 | Servicios, mappers y excepciones, sin Spring |
-| Integración | 57 | 7 | Controllers con MockMvc y repositorios con H2 |
-| End to end | 30 | 3 | La app completa por HTTP real |
+| Unitarias | 121 | 10 | Servicios, mappers, excepciones y roles, sin Spring |
+| Integración | 75 | 8 | Controllers con MockMvc, repositorios con H2 y las reglas de seguridad |
+| End to end | 44 | 4 | La app completa por HTTP real |
 | Contexto | 1 | 1 | Que todos los beans se puedan construir |
 
-Cobertura: **98.7% de líneas**, 95.8% de instrucciones, 87.5% de ramas, 100% de
+Cobertura: **98.3% de líneas**, 95.8% de instrucciones, 87.2% de ramas, 100% de
 clases.
+
+Los 45 tests de seguridad viven en tres archivos y se reparten así:
+
+| Archivo | Qué prueba |
+|---|---|
+| `KeycloakRoleConverterTest` | Que los roles del token se traduzcan bien, incluso si el claim llega roto |
+| `SecurityConfigIntegrationTest` | Las reglas: quién puede llamar a qué, con la cadena de filtros real |
+| `SecurityE2ETest` | Lo mismo por HTTP real: cabeceras, cuerpo del error, y que un rechazo no escriba en la base |
+
+Ninguno necesita Keycloak levantado: se reemplaza solo el `JwtDecoder`, que es
+la pieza que verifica la firma. Todo lo demás —los filtros, la conversión de
+roles, las reglas, los 401 y 403— corre de verdad. Por eso la suite sigue
+funcionando en CI sin un contenedor extra.
 
 ### Correr los tests
 
@@ -316,9 +588,9 @@ clases.
 O solo una familia, que es lo útil mientras trabajas:
 
 ```bash
-./gradlew pruebasUnitarias     # 108 tests, menos de 1s
-./gradlew pruebasIntegracion   # 57 tests, ~1s
-./gradlew pruebasE2E           # 30 tests, ~2s (levantan la app entera)
+./gradlew pruebasUnitarias     # 121 tests, menos de 1s
+./gradlew pruebasIntegracion   # 75 tests, ~2s
+./gradlew pruebasE2E           # 44 tests, ~5s (levantan la app entera)
 ```
 
 La clasificación sale del nombre de la clase, que es la convención que ya seguía
@@ -424,10 +696,13 @@ justo la parte que un test unitario de la clase controller se saltaría.
 | Archivo | Tipo | Tests |
 |---|---|---:|
 | `GlobalExceptionHandlerTest` | Unitario | 22 |
+| `SecurityConfigIntegrationTest` | Integración | 18 |
 | `CowServiceTest` | Unitario | 16 |
 | `GlobalExceptionHandlerIntegrationTest` | Integración | 14 |
 | `OwnerServiceTest` | Unitario | 14 |
+| `SecurityE2ETest` | E2E | 14 |
 | `ClownServiceTest` | Unitario | 13 |
+| `KeycloakRoleConverterTest` | Unitario | 13 |
 | `ClownE2ETest` | E2E | 11 |
 | `ClownControllerIntegrationTest` | Integración | 10 |
 | `CowMapperTest` | Unitario | 10 |
@@ -474,7 +749,7 @@ La cadena completa es esta:
 git push a main
       │
       ▼
-GitHub Actions  →  compila, corre las 196 pruebas, verifica cobertura
+GitHub Actions  →  compila, corre las 241 pruebas, verifica cobertura
       │
       ├── rojo  →  Render NO despliega. Producción sigue con la versión anterior.
       │
@@ -615,15 +890,26 @@ src/main/java/com/sebasmalparqueado/cowsvsclown/
 ├── clowns/              (misma estructura)
 ├── owner/               (misma estructura)
 └── common/
-    ├── config/          OpenApiConfig
+    ├── config/          OpenApiConfig, SecurityConfig
+    ├── security/        KeycloakRoleConverter
+    │                    RestAuthenticationEntryPoint (401)
+    │                    RestAccessDeniedHandler (403)
     └── exceptions/      GlobalExceptionHandler, ErrorResponse
                          BadRequestException, ConflictException,
                          ResourceNotFoundException
 
-src/test/java/...        misma estructura + e2e/
+src/test/java/...        misma estructura + e2e/ (incluye E2EAuth y SecurityE2ETest)
 src/main/resources/      application.yml, application-dev.yml, application-docker.yml
 src/test/resources/      application-test.yml
+keycloak/                realm-cowsvsclown.json (el realm que se importa solo)
+                         README.md (qué hace cada bloque del realm)
 ```
+
+`config/` guarda lo declarativo —qué reglas hay, qué muestra Swagger— y
+`security/` la lógica que sí tiene comportamiento y sí se testea. Por eso
+`SecurityConfig` está en `config/`, junto a `OpenApiConfig`, y no con las otras
+tres: `build.gradle` excluye `**/config/**` del cálculo de cobertura, porque
+medir configuración no dice nada útil.
 
 Cada recurso tiene cuatro DTO en vez de exponer la entidad directamente:
 
@@ -644,11 +930,33 @@ dueño, no el dueño completo con todas sus vacas dentro.
 ### Docker
 
 ```bash
-docker compose up -d          # levanta todo (reconstruye la imagen)
-docker compose up -d db       # solo la base
-docker compose logs -f app    # logs de la app
-docker compose down           # apaga, conserva los datos
-docker compose down -v        # apaga y borra el volumen
+docker compose up -d              # levanta todo (reconstruye la imagen)
+docker compose up -d db keycloak  # solo la base y el login
+docker compose logs -f app        # logs de la app
+docker compose logs -f keycloak   # ver si el realm ya se importó
+docker compose down               # apaga, conserva los datos
+docker compose down -v            # apaga y borra el volumen de Postgres
+```
+
+### Keycloak
+
+```bash
+# Pedir un token (admin / user / curioso)
+TOKEN=$(curl -s -X POST \
+  "http://localhost:8081/realms/cowsvsclown/protocol/openid-connect/token" \
+  -d "client_id=cowsvsclown-api" -d "username=admin" \
+  -d "password=admin123" -d "grant_type=password" | jq -r .access_token)
+
+# Ver qué trae adentro
+echo $TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq
+
+# Usarlo
+curl -X POST http://localhost:8080/api/owners \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"firstName":"Ada","lastName":"Lovelace"}'
+
+# Configuración pública del realm (útil para depurar URLs)
+curl -s http://localhost:8081/realms/cowsvsclown/.well-known/openid-configuration | jq
 ```
 
 ### Gradle
@@ -657,9 +965,9 @@ docker compose down -v        # apaga y borra el volumen
 ./gradlew bootRun                    # corre la app (perfil dev)
 ./gradlew build                      # compila, testea y verifica cobertura
 ./gradlew test                       # todos los tests (+ reportes)
-./gradlew pruebasUnitarias           # solo unitarias (108)
-./gradlew pruebasIntegracion         # solo integración (57)
-./gradlew pruebasE2E                 # solo end to end (30)
+./gradlew pruebasUnitarias           # solo unitarias (121)
+./gradlew pruebasIntegracion         # solo integración (75)
+./gradlew pruebasE2E                 # solo end to end (44)
 ./gradlew cobertura                  # tests + reportes, imprime las rutas
 ./gradlew coberturaAbrir             # tests + reportes + los abre
 ./gradlew publicarReportes           # copia los reportes a docs/reportes/
@@ -690,3 +998,20 @@ Algunas decisiones que no se deducen del código a simple vista:
 * **`FetchType.LAZY` en todas las relaciones**, con queries específicas en los
   repositorios (`findAllActiveWithRelations`) para traer lo que hace falta en
   cada caso sin caer en el problema N+1.
+* **La autenticación está fuera de la API.** No hay tabla de usuarios ni
+  contraseñas hasheadas: eso es un problema resuelto, y resolverlo otra vez mal
+  es la forma más fácil de tener un agujero. Keycloak trae bloqueo por fuerza
+  bruta, expiración, refresh y consola de administración sin escribir una línea.
+* **Sin sesión (`STATELESS`).** No se crea `HttpSession`: cada petición se
+  autentica sola con su token. Es lo que permite correr varias instancias de la
+  API detrás de un balanceador sin compartir sesiones entre ellas.
+* **CSRF desactivado, y no es un atajo.** El ataque CSRF depende de una cookie
+  que el navegador manda sola. Acá la credencial es una cabecera que el cliente
+  pone a mano y ningún sitio ajeno puede leer: sin ese vector, la protección no
+  aporta nada y solo rompería los `POST`.
+* **Las reglas viven en un solo archivo.** `SecurityConfig` es la única fuente de
+  verdad de quién puede llamar a qué, y termina en
+  `anyRequest().authenticated()`: un endpoint nuevo queda protegido por omisión,
+  no abierto. `@EnableMethodSecurity` está activado por si algún día hace falta
+  una regla que dependa de los datos ("solo el dueño puede editar sus vacas"),
+  algo que una regla por URL no puede expresar.

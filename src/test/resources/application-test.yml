@@ -21,6 +21,34 @@ spring:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
 
+  # ---------------------------- Seguridad -----------------------------------
+  # Las pruebas NO levantan Keycloak: sería lento, y además CI no tiene forma de
+  # arrancar un contenedor extra. Estas URLs apuntan a un realm que no existe y
+  # nunca se contactan, por dos razones:
+  #
+  #   1. Spring construye el JwtDecoder de forma PEREZOSA: las llaves públicas se
+  #      descargan la primera vez que hay que validar un token de verdad, no al
+  #      arrancar. Sin esas dos propiedades el arranque sí fallaría, porque
+  #      SecurityConfig pide un JwtDecoder que nadie habría creado.
+  #
+  #   2. Ninguna prueba manda un token real:
+  #        - las de @WebMvcTest usan el post-processor jwt(...) de
+  #          spring-security-test, que salta la validación y arma la
+  #          autenticación ya lista (ver SecurityConfigIntegrationTest);
+  #        - las end to end reemplazan el JwtDecoder por un doble de prueba
+  #          (ver e2e/E2EAuth.java).
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8081/realms/cowsvsclown
+          jwk-set-uri: http://localhost:8081/realms/cowsvsclown/protocol/openid-connect/certs
+
+# Mismo valor que en producción: KeycloakRoleConverter lo necesita para saber de
+# qué cliente leer los roles dentro de resource_access.
+keycloak:
+  client-id: cowsvsclown-api
+
 logging:
   level:
     root: warn

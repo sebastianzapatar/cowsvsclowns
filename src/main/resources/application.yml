@@ -20,6 +20,61 @@ spring:
     # que "validationErrors" solo aparezca en los errores de validación.
     default-property-inclusion: non_null
 
+  # ======================= Validación de los tokens ==========================
+  # Con estas dos propiedades Spring Boot construye solo el "JwtDecoder": el
+  # objeto que abre el token, comprueba la firma y decide si es de fiar. No hay
+  # que escribir ni una línea de Java para eso (lo único que sí hace falta
+  # programar es cómo leer los ROLES, porque Keycloak los guarda a su manera:
+  # ver common/security/KeycloakRoleConverter.java).
+  #
+  # ¿Por qué son DOS URLs distintas y no una?
+  #
+  #   issuer-uri  -> quién dice el token que lo emitió. Spring compara este valor
+  #                  con el claim "iss" que viaja adentro del JWT: si no coincide
+  #                  exactamente, carácter por carácter, el token se rechaza.
+  #                  Es la URL que ve QUIEN PIDE EL TOKEN (tu navegador, tu curl).
+  #
+  #   jwk-set-uri -> de dónde baja la app las llaves públicas del realm para
+  #                  verificar la firma. Es una llamada que hace LA APP, así que
+  #                  tiene que ser una URL alcanzable DESDE la app.
+  #
+  # En local las dos son la misma (localhost:8081) y no hay nada que pensar.
+  # Dentro de Docker no: el token lo pedís vos desde el navegador y dice
+  # "iss": "http://localhost:8081/...", pero el contenedor de la app no tiene
+  # ningún Keycloak en su localhost, para él está en "http://keycloak:8080".
+  # Por eso compose.yml sobreescribe SOLO jwk-set-uri con la URL interna.
+  #
+  # Este es EL error clásico de Keycloak + Docker. Si se deja una sola URL:
+  #   - la interna  -> "The iss claim is not valid" (401 con token bueno)
+  #   - la externa  -> "Connection refused" al bajar las llaves
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${keycloak.issuer-uri}
+          jwk-set-uri: ${KEYCLOAK_JWK_SET_URI:${keycloak.issuer-uri}/protocol/openid-connect/certs}
+
+          # Opcional, comentado a propósito: exige que el token venga destinado a
+          # esta API (claim "aud"). El realm ya incluye el mapper que agrega esa
+          # audiencia, así que basta con descomentar para que un token emitido
+          # para OTRO cliente del mismo realm deje de servir acá.
+          # audiences:
+          #   - cowsvsclown-api
+
+# ================================= Keycloak ==================================
+# Datos del servidor de identidad. Se agrupan acá, en un prefijo propio, para
+# no repetir la misma URL en cuatro lugares distintos: de estos valores salen
+# tanto la validación del token (arriba) como los enlaces de Swagger.
+#
+#   issuer-uri : la dirección PÚBLICA del realm, la que se abre en el navegador.
+#                Ojo: el puerto es el 8081 porque el 8080 ya lo usa esta API.
+#   client-id  : el cliente registrado en Keycloak. Se usa en dos sitios:
+#                  - Swagger, para saber en nombre de quién pedir el token
+#                  - KeycloakRoleConverter, para leer los roles de ese cliente
+keycloak:
+  issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8081/realms/cowsvsclown}
+  client-id: ${KEYCLOAK_CLIENT_ID:cowsvsclown-api}
+
 # ================================= Servidor ==================================
 # En local y en Docker no hay variable PORT, así que se usa el 8080 de siempre.
 # Render (y casi cualquier PaaS) asigna un puerto propio en la variable PORT y
@@ -47,6 +102,18 @@ springdoc:
     # Deja los grupos plegados al abrir la página: con 3 recursos y ~18
     # endpoints, desplegado no se ve nada.
     doc-expansion: none
+
+    # ------------------------- Botón "Authorize" ---------------------------
+    # Con esto el candado de Swagger sabe pedirle el token a Keycloak solo, sin
+    # que haya que copiar y pegar nada. Los flujos y las URLs se declaran en
+    # OpenApiConfig; acá va únicamente lo que es propio del cliente Swagger.
+    oauth:
+      client-id: ${keycloak.client-id}
+      # PKCE: obligatorio para clientes públicos (sin secreto), que es lo que es
+      # Swagger. El cliente del realm viene configurado para exigirlo, así que si
+      # esto quedara en false Keycloak devolvería "Missing parameter:
+      # code_challenge" al intentar autorizar.
+      use-pkce-with-authorization-code-grant: true
 
 # ================================= Actuator ==================================
 # Solo se expone /actuator/health. El resto de endpoints (env, beans, mappings)

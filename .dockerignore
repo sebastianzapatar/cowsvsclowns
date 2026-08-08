@@ -34,3 +34,7 @@ out/
 # Archivos del sistema y documentación
 .DS_Store
 *.md
+
+# El realm de Keycloak. No entra en la imagen de la app: lo monta compose.yml
+# directamente en el contenedor de Keycloak, que es otro servicio.
+keycloak/

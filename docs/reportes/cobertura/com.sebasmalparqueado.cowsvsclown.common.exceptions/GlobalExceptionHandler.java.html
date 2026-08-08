@@ -7,6 +7,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -31,8 +33,8 @@ import java.util.Map;
  * handler matches.&lt;/p&gt;
  */
 @RestControllerAdvice
-<span class="fc" id="L34">@Slf4j</span>
-<span class="fc" id="L35">public class GlobalExceptionHandler {</span>
+<span class="fc" id="L36">@Slf4j</span>
+<span class="fc" id="L37">public class GlobalExceptionHandler {</span>
 
     // ======================= Custom Exceptions ==========================
 
@@ -41,8 +43,8 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleResourceNotFound(
             ResourceNotFoundException e, HttpServletRequest request) {
 
-<span class="fc" id="L44">        log.warn(&quot;404 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
-<span class="fc" id="L45">        return build(HttpStatus.NOT_FOUND, e.getMessage(), request);</span>
+<span class="fc" id="L46">        log.warn(&quot;404 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
+<span class="fc" id="L47">        return build(HttpStatus.NOT_FOUND, e.getMessage(), request);</span>
     }
 
     /** 400: business rule violated. */
@@ -50,8 +52,8 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleBadRequest(
             BadRequestException e, HttpServletRequest request) {
 
-<span class="fc" id="L53">        log.warn(&quot;400 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
-<span class="fc" id="L54">        return build(HttpStatus.BAD_REQUEST, e.getMessage(), request);</span>
+<span class="fc" id="L55">        log.warn(&quot;400 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
+<span class="fc" id="L56">        return build(HttpStatus.BAD_REQUEST, e.getMessage(), request);</span>
     }
 
     /** 409: conflicts with current state (duplicates, repeated assignments). */
@@ -59,8 +61,8 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleConflict(
             ConflictException e, HttpServletRequest request) {
 
-<span class="fc" id="L62">        log.warn(&quot;409 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
-<span class="fc" id="L63">        return build(HttpStatus.CONFLICT, e.getMessage(), request);</span>
+<span class="fc" id="L64">        log.warn(&quot;409 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
+<span class="fc" id="L65">        return build(HttpStatus.CONFLICT, e.getMessage(), request);</span>
     }
 
     // ==================== Request Validation =======================
@@ -76,29 +78,29 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleMethodArgumentNotValid(
             MethodArgumentNotValidException e, HttpServletRequest request) {
 
-<span class="fc" id="L79">        Map&lt;String, String&gt; errors = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L81">        Map&lt;String, String&gt; errors = new LinkedHashMap&lt;&gt;();</span>
 
-<span class="fc" id="L81">        e.getBindingResult().getFieldErrors().forEach(fieldError -&gt;</span>
+<span class="fc" id="L83">        e.getBindingResult().getFieldErrors().forEach(fieldError -&gt;</span>
                 // merge and not put: if a field has two broken rules, the messages
                 // are concatenated instead of losing one.
-<span class="fc" id="L84">                errors.merge(</span>
-<span class="fc" id="L85">                        fieldError.getField(),</span>
-<span class="fc" id="L86">                        String.valueOf(fieldError.getDefaultMessage()),</span>
-<span class="fc" id="L87">                        (oldVal, newVal) -&gt; oldVal + &quot;; &quot; + newVal));</span>
+<span class="fc" id="L86">                errors.merge(</span>
+<span class="fc" id="L87">                        fieldError.getField(),</span>
+<span class="fc" id="L88">                        String.valueOf(fieldError.getDefaultMessage()),</span>
+<span class="fc" id="L89">                        (oldVal, newVal) -&gt; oldVal + &quot;; &quot; + newVal));</span>
 
-<span class="fc" id="L89">        e.getBindingResult().getGlobalErrors().forEach(globalError -&gt;</span>
-<span class="fc" id="L90">                errors.merge(</span>
+<span class="fc" id="L91">        e.getBindingResult().getGlobalErrors().forEach(globalError -&gt;</span>
+<span class="fc" id="L92">                errors.merge(</span>
                         &quot;object&quot;,
-<span class="fc" id="L92">                        String.valueOf(globalError.getDefaultMessage()),</span>
-<span class="fc" id="L93">                        (oldVal, newVal) -&gt; oldVal + &quot;; &quot; + newVal));</span>
+<span class="fc" id="L94">                        String.valueOf(globalError.getDefaultMessage()),</span>
+<span class="fc" id="L95">                        (oldVal, newVal) -&gt; oldVal + &quot;; &quot; + newVal));</span>
 
-<span class="fc" id="L95">        log.warn(&quot;Validation failed in {}: {}&quot;, request.getRequestURI(), errors);</span>
+<span class="fc" id="L97">        log.warn(&quot;Validation failed in {}: {}&quot;, request.getRequestURI(), errors);</span>
 
-<span class="fc" id="L97">        return ResponseEntity</span>
-<span class="fc" id="L98">                .status(HttpStatus.BAD_REQUEST)</span>
-<span class="fc" id="L99">                .body(ErrorResponse.ofValidation(</span>
+<span class="fc" id="L99">        return ResponseEntity</span>
+<span class="fc" id="L100">                .status(HttpStatus.BAD_REQUEST)</span>
+<span class="fc" id="L101">                .body(ErrorResponse.ofValidation(</span>
                         &quot;There are invalid fields in the request&quot;,
-<span class="fc" id="L101">                        request.getRequestURI(),</span>
+<span class="fc" id="L103">                        request.getRequestURI(),</span>
                         errors));
     }
 
@@ -110,19 +112,19 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleConstraintViolation(
             ConstraintViolationException e, HttpServletRequest request) {
 
-<span class="fc" id="L113">        Map&lt;String, String&gt; errors = new LinkedHashMap&lt;&gt;();</span>
-<span class="fc" id="L114">        e.getConstraintViolations().forEach(violation -&gt;</span>
-<span class="fc" id="L115">                errors.put(</span>
-<span class="fc" id="L116">                        String.valueOf(violation.getPropertyPath()),</span>
-<span class="fc" id="L117">                        violation.getMessage()));</span>
+<span class="fc" id="L115">        Map&lt;String, String&gt; errors = new LinkedHashMap&lt;&gt;();</span>
+<span class="fc" id="L116">        e.getConstraintViolations().forEach(violation -&gt;</span>
+<span class="fc" id="L117">                errors.put(</span>
+<span class="fc" id="L118">                        String.valueOf(violation.getPropertyPath()),</span>
+<span class="fc" id="L119">                        violation.getMessage()));</span>
 
-<span class="fc" id="L119">        log.warn(&quot;Invalid parameters in {}: {}&quot;, request.getRequestURI(), errors);</span>
+<span class="fc" id="L121">        log.warn(&quot;Invalid parameters in {}: {}&quot;, request.getRequestURI(), errors);</span>
 
-<span class="fc" id="L121">        return ResponseEntity</span>
-<span class="fc" id="L122">                .status(HttpStatus.BAD_REQUEST)</span>
-<span class="fc" id="L123">                .body(ErrorResponse.ofValidation(</span>
+<span class="fc" id="L123">        return ResponseEntity</span>
+<span class="fc" id="L124">                .status(HttpStatus.BAD_REQUEST)</span>
+<span class="fc" id="L125">                .body(ErrorResponse.ofValidation(</span>
                         &quot;There are invalid parameters in the request&quot;,
-<span class="fc" id="L125">                        request.getRequestURI(),</span>
+<span class="fc" id="L127">                        request.getRequestURI(),</span>
                         errors));
     }
 
@@ -137,8 +139,8 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleNotReadable(
             HttpMessageNotReadableException e, HttpServletRequest request) {
 
-<span class="fc" id="L140">        log.warn(&quot;Unreadable body in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
-<span class="fc" id="L141">        return build(HttpStatus.BAD_REQUEST,</span>
+<span class="fc" id="L142">        log.warn(&quot;Unreadable body in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
+<span class="fc" id="L143">        return build(HttpStatus.BAD_REQUEST,</span>
                 &quot;The request body is not valid JSON or a field has an unexpected type&quot;,
                 request);
     }
@@ -151,13 +153,13 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleTypeMismatch(
             MethodArgumentTypeMismatchException e, HttpServletRequest request) {
 
-<span class="fc bfc" id="L154" title="All 2 branches covered.">        String expectedType = e.getRequiredType() == null</span>
-<span class="fc" id="L155">                ? &quot;the expected type&quot;</span>
-<span class="fc" id="L156">                : e.getRequiredType().getSimpleName();</span>
+<span class="fc bfc" id="L156" title="All 2 branches covered.">        String expectedType = e.getRequiredType() == null</span>
+<span class="fc" id="L157">                ? &quot;the expected type&quot;</span>
+<span class="fc" id="L158">                : e.getRequiredType().getSimpleName();</span>
 
-<span class="fc" id="L158">        return build(HttpStatus.BAD_REQUEST,</span>
+<span class="fc" id="L160">        return build(HttpStatus.BAD_REQUEST,</span>
                 &quot;The value '%s' is not valid for the parameter '%s' (expected %s)&quot;
-<span class="fc" id="L160">                        .formatted(e.getValue(), e.getName(), expectedType),</span>
+<span class="fc" id="L162">                        .formatted(e.getValue(), e.getName(), expectedType),</span>
                 request);
     }
 
@@ -166,8 +168,8 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleMissingParam(
             MissingServletRequestParameterException e, HttpServletRequest request) {
 
-<span class="fc" id="L169">        return build(HttpStatus.BAD_REQUEST,</span>
-<span class="fc" id="L170">                &quot;Missing required parameter '%s'&quot;.formatted(e.getParameterName()),</span>
+<span class="fc" id="L171">        return build(HttpStatus.BAD_REQUEST,</span>
+<span class="fc" id="L172">                &quot;Missing required parameter '%s'&quot;.formatted(e.getParameterName()),</span>
                 request);
     }
 
@@ -178,8 +180,8 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleNoResourceFound(
             NoResourceFoundException e, HttpServletRequest request) {
 
-<span class="fc" id="L181">        return build(HttpStatus.NOT_FOUND,</span>
-<span class="fc" id="L182">                &quot;The path %s does not exist in this API&quot;.formatted(request.getRequestURI()),</span>
+<span class="fc" id="L183">        return build(HttpStatus.NOT_FOUND,</span>
+<span class="fc" id="L184">                &quot;The path %s does not exist in this API&quot;.formatted(request.getRequestURI()),</span>
                 request);
     }
 
@@ -188,9 +190,54 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleMethodNotSupported(
             HttpRequestMethodNotSupportedException e, HttpServletRequest request) {
 
-<span class="fc" id="L191">        return build(HttpStatus.METHOD_NOT_ALLOWED,</span>
+<span class="fc" id="L193">        return build(HttpStatus.METHOD_NOT_ALLOWED,</span>
                 &quot;The %s method is not allowed on this path. Allowed: %s&quot;
-<span class="fc" id="L193">                        .formatted(e.getMethod(), e.getSupportedHttpMethods()),</span>
+<span class="fc" id="L195">                        .formatted(e.getMethod(), e.getSupportedHttpMethods()),</span>
+                request);
+    }
+
+    // ========================== Security =============================
+
+    /**
+     * 401: the request carries no token, or the token is expired, badly signed
+     * or issued by a different realm.
+     *
+     * &lt;p&gt;These rejections happen in the Spring Security filter chain, before the
+     * DispatcherServlet, so they would never reach this class on their own.
+     * {@code RestAuthenticationEntryPoint} is what feeds them back into Spring
+     * MVC's exception resolver, precisely so that the body ends up being built
+     * here and every API error keeps the same shape.&lt;/p&gt;
+     *
+     * &lt;p&gt;The message is deliberately vague. Telling the client whether the token
+     * expired, was tampered with or came from another issuer only helps someone
+     * probing the API; the real reason is in the logs.&lt;/p&gt;
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleUnauthenticated(
+            AuthenticationException e, HttpServletRequest request) {
+
+<span class="fc" id="L219">        log.warn(&quot;401 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
+<span class="fc" id="L220">        return build(HttpStatus.UNAUTHORIZED,</span>
+                &quot;A valid access token is required to use this endpoint&quot;,
+                request);
+    }
+
+    /**
+     * 403: the token is valid, but the user lacks the role the route demands
+     * (e.g. a USER trying to DELETE, which is reserved for ADMIN).
+     *
+     * &lt;p&gt;Also covers {@code AuthorizationDeniedException}, the subclass thrown by
+     * method security ({@code @PreAuthorize}), which does travel through the
+     * controller and would otherwise be swallowed by {@link #handleUnexpected}
+     * and turned into a 500.&lt;/p&gt;
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleAccessDenied(
+            AccessDeniedException e, HttpServletRequest request) {
+
+<span class="fc" id="L238">        log.warn(&quot;403 in {}: {}&quot;, request.getRequestURI(), e.getMessage());</span>
+<span class="fc" id="L239">        return build(HttpStatus.FORBIDDEN,</span>
+                &quot;Your user does not have permission to perform this operation&quot;,
                 request);
     }
 
@@ -209,8 +256,8 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleDataIntegrity(
             DataIntegrityViolationException e, HttpServletRequest request) {
 
-<span class="fc" id="L212">        log.error(&quot;Integrity violation in {}&quot;, request.getRequestURI(), e);</span>
-<span class="fc" id="L213">        return build(HttpStatus.CONFLICT,</span>
+<span class="fc" id="L259">        log.error(&quot;Integrity violation in {}&quot;, request.getRequestURI(), e);</span>
+<span class="fc" id="L260">        return build(HttpStatus.CONFLICT,</span>
                 &quot;The operation violates a database constraint &quot;
                         + &quot;(duplicated data or missing reference)&quot;,
                 request);
@@ -229,8 +276,8 @@ import java.util.Map;
     public ResponseEntity&lt;ErrorResponse&gt; handleUnexpected(
             Exception e, HttpServletRequest request) {
 
-<span class="fc" id="L232">        log.error(&quot;Unhandled error in {}&quot;, request.getRequestURI(), e);</span>
-<span class="fc" id="L233">        return build(HttpStatus.INTERNAL_SERVER_ERROR,</span>
+<span class="fc" id="L279">        log.error(&quot;Unhandled error in {}&quot;, request.getRequestURI(), e);</span>
+<span class="fc" id="L280">        return build(HttpStatus.INTERNAL_SERVER_ERROR,</span>
                 &quot;An unexpected server error occurred&quot;,
                 request);
     }
@@ -241,9 +288,9 @@ import java.util.Map;
     private ResponseEntity&lt;ErrorResponse&gt; build(HttpStatus status,
                                                 String message,
                                                 HttpServletRequest request) {
-<span class="fc" id="L244">        return ResponseEntity</span>
-<span class="fc" id="L245">                .status(status)</span>
-<span class="fc" id="L246">                .body(ErrorResponse.of(status, message, request.getRequestURI()));</span>
+<span class="fc" id="L291">        return ResponseEntity</span>
+<span class="fc" id="L292">                .status(status)</span>
+<span class="fc" id="L293">                .body(ErrorResponse.of(status, message, request.getRequestURI()));</span>
     }
 }
 </pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

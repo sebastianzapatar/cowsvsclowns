@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+<meta http-equiv="x-ua-compatible" content="IE=edge"/>
+<title>Test results - com.sebasmalparqueado.cowsvsclown.e2e.SecurityE2ETest$SinToken</title>
+<link href="../../css/base-style.css" rel="stylesheet" type="text/css"/>
+<link href="../../css/style.css" rel="stylesheet" type="text/css"/>
+<script src="../../js/report.js" type="text/javascript"></script>
+</head>
+<body>
+<div id="content">
+<div class="breadcrumbs">
+<a class="breadcrumb" href="../../index.html">all</a> &gt; 
+<a class="breadcrumb" href="../index.html">com.sebasmalparqueado.cowsvsclown.e2e.SecurityE2ETest</a> &gt; 
+<span class="breadcrumb">com.sebasmalparqueado.cowsvsclown.e2e.SecurityE2ETest$SinToken</span>
+</div>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a class="successGroup" href="#">Gradle Test Run :test</a>
+</li>
+</ul>
+<div class="tab">
+<h2>Gradle Test Run :test</h2>
+<h1>Without a valid token: 401</h1>
+<div class="tab-container">
+<ul class="tabLinks">
+<li>
+<a class="" href="#">summary</a>
+</li>
+<li>
+<a class="" href="#">standard output</a>
+</li>
+</ul>
+<div class="tab">
+<h2>summary</h2>
+<div>
+<div class="summary">
+<table>
+<tr>
+<td>
+<div class="summaryGroup">
+<table>
+<tr>
+<td>
+<div class="infoBox">
+<div class="counter">5</div>
+<p>tests</p>
+</div>
+</td>
+<td>
+<div class="infoBox">
+<div class="counter">0</div>
+<p>failures</p>
+</div>
+</td>
+<td>
+<div class="infoBox">
+<div class="counter">0</div>
+<p>skipped</p>
+</div>
+</td>
+<td>
+<div class="infoBox duration">
+<div class="counter">1.299s</div>
+<p>duration</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+</td>
+<td>
+<div class="infoBox success successRate">
+<div class="percent">100%</div>
+<p>successful</p>
+</div>
+</td>
+</tr>
+</table>
+</div>
+<table class="test-results">
+<thead>
+<tr>
+<th>Child</th>
+<th>Name</th>
+<th>Tests</th>
+<th>Failures</th>
+<th>Skipped</th>
+<th>Duration</th>
+<th>Success rate</th>
+</tr>
+</thead>
+<tr>
+<td class="success">
+<a href="T5dqxtUdvFg.html">the response says how one should have authenticated</a>
+</td>
+<td class="path">cabeceraWwwAuthenticate()</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0.024s</td>
+<td class="success">100%</td>
+</tr>
+<tr>
+<td class="success">
+<a href="NOHEJ4eOce4.html">the body arrives as JSON with the standard error format</a>
+</td>
+<td class="path">cuerpoDelError()</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0.035s</td>
+<td class="success">100%</td>
+</tr>
+<tr>
+<td class="success">
+<a href="ROUSA7pwfIo.html">nothing is written to the database</a>
+</td>
+<td class="path">noSeEscribeNada()</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0.032s</td>
+<td class="success">100%</td>
+</tr>
+<tr>
+<td class="success">
+<a href="LXrNCBSrq64.html">a made-up token is rejected the same way</a>
+</td>
+<td class="path">postConTokenInventado()</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0.031s</td>
+<td class="success">100%</td>
+</tr>
+<tr>
+<td class="success">
+<a href="pDsB2-_oE2Q.html">a POST with no Authorization header is rejected</a>
+</td>
+<td class="path">postSinToken()</td>
+<td>1</td>
+<td>0</td>
+<td>0</td>
+<td>0.026s</td>
+<td class="success">100%</td>
+</tr>
+</table>
+</div>
+</div>
+<div class="tab">
+<h2>standard output</h2>
+<span class="code">
+<pre id="root-0-test-stdout-com.sebasmalparqueado.cowsvsclown.e2e.SecurityE2ETest$SinToken">
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-08-07T15:41:18.630-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : Starting SecurityE2ETest.SinToken using Java 25 with PID 9503 (started by sebastianzapata in /Users/sebastianzapata/Documents/implementacion20262/cowsvsclown)
+2026-08-07T15:41:18.631-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : The following 1 profile is active: &quot;test&quot;
+2026-08-07T15:41:18.750-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] org.hibernate.orm.deprecation            : HHH90000025: H2Dialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-08-07T15:41:18.795-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-08-07T15:41:18.859-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : Started SecurityE2ETest.SinToken in 0.233 seconds (process running for 17.716)
+2026-08-07T15:41:18.860-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /v3/api-docs endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-08-07T15:41:18.860-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-08-07T15:41:18.898-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : Starting SecurityE2ETest.SinToken using Java 25 with PID 9503 (started by sebastianzapata in /Users/sebastianzapata/Documents/implementacion20262/cowsvsclown)
+2026-08-07T15:41:18.898-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : The following 1 profile is active: &quot;test&quot;
+2026-08-07T15:41:19.003-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] org.hibernate.orm.deprecation            : HHH90000025: H2Dialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-08-07T15:41:19.043-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-08-07T15:41:19.117-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : Started SecurityE2ETest.SinToken in 0.224 seconds (process running for 17.973)
+2026-08-07T15:41:19.117-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /v3/api-docs endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-08-07T15:41:19.117-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-08-07T15:41:19.149-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : Starting SecurityE2ETest.SinToken using Java 25 with PID 9503 (started by sebastianzapata in /Users/sebastianzapata/Documents/implementacion20262/cowsvsclown)
+2026-08-07T15:41:19.149-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : The following 1 profile is active: &quot;test&quot;
+2026-08-07T15:41:19.269-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] org.hibernate.orm.deprecation            : HHH90000025: H2Dialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-08-07T15:41:19.311-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-08-07T15:41:19.375-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : Started SecurityE2ETest.SinToken in 0.231 seconds (process running for 18.231)
+2026-08-07T15:41:19.375-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /v3/api-docs endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-08-07T15:41:19.375-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-08-07T15:41:19.416-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : Starting SecurityE2ETest.SinToken using Java 25 with PID 9503 (started by sebastianzapata in /Users/sebastianzapata/Documents/implementacion20262/cowsvsclown)
+2026-08-07T15:41:19.416-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : The following 1 profile is active: &quot;test&quot;
+2026-08-07T15:41:19.519-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] org.hibernate.orm.deprecation            : HHH90000025: H2Dialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-08-07T15:41:19.564-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-08-07T15:41:19.649-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : Started SecurityE2ETest.SinToken in 0.238 seconds (process running for 18.505)
+2026-08-07T15:41:19.649-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /v3/api-docs endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-08-07T15:41:19.649-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v4.1.0)
+
+2026-08-07T15:41:19.680-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : Starting SecurityE2ETest.SinToken using Java 25 with PID 9503 (started by sebastianzapata in /Users/sebastianzapata/Documents/implementacion20262/cowsvsclown)
+2026-08-07T15:41:19.680-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : The following 1 profile is active: &quot;test&quot;
+2026-08-07T15:41:19.781-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] org.hibernate.orm.deprecation            : HHH90000025: H2Dialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+2026-08-07T15:41:19.825-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] JpaBaseConfiguration$JpaWebConfiguration : spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+2026-08-07T15:41:19.891-05:00  INFO 9503 --- [cowsvsclown] [    Test worker] c.s.c.e2e.SecurityE2ETest$SinToken       : Started SecurityE2ETest.SinToken in 0.217 seconds (process running for 18.747)
+2026-08-07T15:41:19.891-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /v3/api-docs endpoint is enabled by default. To disable it in production, set the property 'springdoc.api-docs.enabled=false'
+2026-08-07T15:41:19.891-05:00  WARN 9503 --- [cowsvsclown] [    Test worker] o.s.core.events.SpringDocAppInitializer  : SpringDoc /swagger-ui.html endpoint is enabled by default. To disable it in production, set the property 'springdoc.swagger-ui.enabled=false'
+</pre>
+<button class="clipboard-copy-btn" aria-label="Copy to clipboard" data-copy-element-id="root-0-test-stdout-com.sebasmalparqueado.cowsvsclown.e2e.SecurityE2ETest$SinToken">Copy</button>
+</span>
+</div>
+</div>
+</div>
+</div>
+<div id="footer">
+<p>
+<div>
+<label class="hidden" id="label-for-line-wrapping-toggle" for="line-wrapping-toggle">Wrap lines
+<input id="line-wrapping-toggle" type="checkbox" autocomplete="off"/>
+</label>
+</div>Generated by 
+<a href="https://www.gradle.org">Gradle 9.5.1</a> at Aug 7, 2026, 3:41:22 PM</p>
+</div>
+</div>
+</body>
+</html>

@@ -30,6 +30,25 @@ dependencies {
 	// Swagger / OpenAPI. La línea 3.x es la compatible con Spring Boot 4;
 	// la 2.x solo funciona con Spring Boot 3.
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.3'
+
+	// ============================ Seguridad ==============================
+	// spring-boot-starter-security  -> la cadena de filtros de Spring Security.
+	//   Solo con tenerlo en el classpath, TODA la app queda cerrada por defecto
+	//   (401 en cualquier ruta). Quién puede entrar a qué se decide en
+	//   common/config/SecurityConfig.java.
+	//
+	// ...-security-oauth2-resource-server -> el trozo que entiende JWT.
+	//   Convierte a la app en un "resource server": no tiene login propio ni
+	//   guarda contraseñas; solo recibe un token que emitió Keycloak, verifica
+	//   la firma contra las llaves públicas del realm y saca de ahí el usuario
+	//   y sus roles.
+	//
+	// OJO con los nombres: en Spring Boot 4 los starters se reorganizaron y
+	// este pasó a llamarse "spring-boot-starter-security-oauth2-resource-server".
+	// En Boot 3 era "spring-boot-starter-oauth2-resource-server" (sin
+	// "security-"); si copiás un tutorial viejo, Gradle no lo resuelve.
+	implementation 'org.springframework.boot:spring-boot-starter-security'
+	implementation 'org.springframework.boot:spring-boot-starter-security-oauth2-resource-server'
 	compileOnly 'org.projectlombok:lombok'
 	developmentOnly 'org.springframework.boot:spring-boot-devtools'
 	runtimeOnly 'org.postgresql:postgresql'
@@ -37,6 +56,10 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-validation-test'
 	testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+	// Utilidades para probar seguridad sin Keycloak levantado: aporta los
+	// post-processors jwt(...) de MockMvc, que inyectan un token ya "validado"
+	// con los roles que uno elija. Ver SecurityConfigIntegrationTest.
+	testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 	testCompileOnly 'org.projectlombok:lombok'
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	testRuntimeOnly 'com.h2database:h2'

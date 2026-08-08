@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.MediaType;
@@ -33,6 +34,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * {@code @Valid} body.</p>
  */
 @WebMvcTest(CowController.class)
+// Turns the Spring Security filter chain off for this class. Without it every
+// POST, PATCH and DELETE below would answer 401 and would no longer be testing
+// what it means to test: the HTTP contract of the controller.
+//
+// It is not a way of dodging security. The rules live in one place,
+// SecurityConfig, and are verified in one place, SecurityConfigIntegrationTest,
+// which does run with the chain on. Duplicating them here would mean four
+// classes to update every time a route changes.
+@AutoConfigureMockMvc(addFilters = false)
 @ActiveProfiles("test")
 class GlobalExceptionHandlerIntegrationTest {
 

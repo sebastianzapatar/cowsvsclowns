@@ -7,6 +7,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -191,6 +193,51 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.METHOD_NOT_ALLOWED,
                 "The %s method is not allowed on this path. Allowed: %s"
                         .formatted(e.getMethod(), e.getSupportedHttpMethods()),
+                request);
+    }
+
+    // ========================== Security =============================
+
+    /**
+     * 401: the request carries no token, or the token is expired, badly signed
+     * or issued by a different realm.
+     *
+     * <p>These rejections happen in the Spring Security filter chain, before the
+     * DispatcherServlet, so they would never reach this class on their own.
+     * {@code RestAuthenticationEntryPoint} is what feeds them back into Spring
+     * MVC's exception resolver, precisely so that the body ends up being built
+     * here and every API error keeps the same shape.</p>
+     *
+     * <p>The message is deliberately vague. Telling the client whether the token
+     * expired, was tampered with or came from another issuer only helps someone
+     * probing the API; the real reason is in the logs.</p>
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthenticated(
+            AuthenticationException e, HttpServletRequest request) {
+
+        log.warn("401 in {}: {}", request.getRequestURI(), e.getMessage());
+        return build(HttpStatus.UNAUTHORIZED,
+                "A valid access token is required to use this endpoint",
+                request);
+    }
+
+    /**
+     * 403: the token is valid, but the user lacks the role the route demands
+     * (e.g. a USER trying to DELETE, which is reserved for ADMIN).
+     *
+     * <p>Also covers {@code AuthorizationDeniedException}, the subclass thrown by
+     * method security ({@code @PreAuthorize}), which does travel through the
+     * controller and would otherwise be swallowed by {@link #handleUnexpected}
+     * and turned into a 500.</p>
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDenied(
+            AccessDeniedException e, HttpServletRequest request) {
+
+        log.warn("403 in {}: {}", request.getRequestURI(), e.getMessage());
+        return build(HttpStatus.FORBIDDEN,
+                "Your user does not have permission to perform this operation",
                 request);
     }
 

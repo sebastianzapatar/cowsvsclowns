@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RestAccessDeniedHandler.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.common.security</a> &gt; <span class="el_source">RestAccessDeniedHandler.java</span></div><h1>RestAccessDeniedHandler.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.common.security;
+
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.GlobalExceptionHandler;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+
+import java.io.IOException;
+
+/**
+ * Qué se le responde a quien &lt;b&gt;sí está autenticado pero no tiene el rol&lt;/b&gt; que
+ * la ruta exige: &lt;b&gt;403 Forbidden&lt;/b&gt;.
+ *
+ * &lt;p&gt;La diferencia con el 401 es la pregunta que se responde:&lt;/p&gt;
+ * &lt;ul&gt;
+ *   &lt;li&gt;&lt;b&gt;401 Unauthorized&lt;/b&gt; — &quot;no sé quién sos&quot;. Falta el token o no es
+ *       válido. Lo maneja {@link RestAuthenticationEntryPoint}.&lt;/li&gt;
+ *   &lt;li&gt;&lt;b&gt;403 Forbidden&lt;/b&gt; — &quot;sé quién sos, y no podés&quot;. El token es
+ *       perfectamente válido, pero por ejemplo un usuario con rol USER intentó
+ *       un DELETE, que está reservado a ADMIN.&lt;/li&gt;
+ * &lt;/ul&gt;
+ *
+ * &lt;p&gt;El mecanismo es el mismo que en el 401: se delega en el
+ * {@code handlerExceptionResolver} de Spring MVC para que el cuerpo lo arme el
+ * {@link GlobalExceptionHandler} y todos los errores de la API tengan la misma
+ * forma.&lt;/p&gt;
+ */
+public class RestAccessDeniedHandler implements AccessDeniedHandler {
+
+    private final HandlerExceptionResolver resolver;
+
+<span class="fc" id="L35">    public RestAccessDeniedHandler(HandlerExceptionResolver resolver) {</span>
+<span class="fc" id="L36">        this.resolver = resolver;</span>
+<span class="fc" id="L37">    }</span>
+
+    @Override
+    public void handle(HttpServletRequest request,
+                       HttpServletResponse response,
+                       AccessDeniedException accessDeniedException) throws IOException {
+
+<span class="pc bpc" id="L44" title="1 of 2 branches missed.">        if (resolver.resolveException(request, response, null, accessDeniedException) == null) {</span>
+<span class="nc" id="L45">            response.sendError(HttpStatus.FORBIDDEN.value());</span>
+        }
+<span class="fc" id="L47">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>

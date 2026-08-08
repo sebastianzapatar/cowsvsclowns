@@ -1,0 +1,2144 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keycloak en Cows vs Clowns — guía completa</title>
+<meta name="description" content="Qué es Keycloak, por qué se eligió en vez de programar el login a mano, cómo está montado en la API Cows vs Clowns y cómo comprobar que protege lo que dice proteger.">
+
+<style>
+/* Reset mínimo: el archivo se abre como página suelta, sin hoja de estilos previa. */
+html { -webkit-text-size-adjust: 100%; }
+img, svg { max-width: 100%; height: auto; }
+
+/* ==========================================================================
+   TOKENS
+   Paleta de manual técnico: papel con sesgo verde-gris, tinta petróleo como
+   único color fuerte, y tres semánticos reservados EXCLUSIVAMENTE para los
+   códigos de estado HTTP (para que un chip 403 nunca se confunda con un enlace).
+   ========================================================================== */
+:root {
+  --bg:          #F6F7F5;
+  --bg-sunken:   #EDEFEC;
+  --surface:     #FFFFFF;
+  --ink:         #16211F;
+  --ink-2:       #4A5754;
+  --ink-3:       #78847F;
+  --rule:        #DBE0DC;
+  --rule-strong: #C2CAC5;
+  --accent:      #0B6E63;
+  --accent-deep: #084F47;
+  --accent-soft: #E2EFEC;
+  --ok:          #2F7D3A;
+  --ok-soft:     #E4F1E4;
+  --warn:        #8A5E0E;
+  --warn-soft:   #F6EEDC;
+  --danger:      #A8342C;
+  --danger-soft: #F7E6E4;
+  --shadow:      0 1px 2px rgba(22, 33, 31, .05), 0 8px 24px -16px rgba(22, 33, 31, .28);
+
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, ui-serif, serif;
+  --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  --measure: 68ch;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:          #0E1413;
+    --bg-sunken:   #0A100F;
+    --surface:     #151D1C;
+    --ink:         #E7EDEB;
+    --ink-2:       #A3B0AD;
+    --ink-3:       #77837F;
+    --rule:        #26312F;
+    --rule-strong: #36443F;
+    --accent:      #55C8B4;
+    --accent-deep: #8BDECD;
+    --accent-soft: #14302C;
+    --ok:          #62C97C;
+    --ok-soft:     #16291B;
+    --warn:        #D7A544;
+    --warn-soft:   #2C2415;
+    --danger:      #E8837A;
+    --danger-soft: #2F1917;
+    --shadow:      0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+  }
+}
+
+/* El toggle del visor (o el propio) tiene que ganarle al media query en AMBOS
+   sentidos, por eso se redefinen los tokens completos y no solo unos pocos. */
+:root[data-theme="dark"] {
+  --bg:          #0E1413;
+  --bg-sunken:   #0A100F;
+  --surface:     #151D1C;
+  --ink:         #E7EDEB;
+  --ink-2:       #A3B0AD;
+  --ink-3:       #77837F;
+  --rule:        #26312F;
+  --rule-strong: #36443F;
+  --accent:      #55C8B4;
+  --accent-deep: #8BDECD;
+  --accent-soft: #14302C;
+  --ok:          #62C97C;
+  --ok-soft:     #16291B;
+  --warn:        #D7A544;
+  --warn-soft:   #2C2415;
+  --danger:      #E8837A;
+  --danger-soft: #2F1917;
+  --shadow:      0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .7);
+}
+:root[data-theme="light"] {
+  --bg:          #F6F7F5;
+  --bg-sunken:   #EDEFEC;
+  --surface:     #FFFFFF;
+  --ink:         #16211F;
+  --ink-2:       #4A5754;
+  --ink-3:       #78847F;
+  --rule:        #DBE0DC;
+  --rule-strong: #C2CAC5;
+  --accent:      #0B6E63;
+  --accent-deep: #084F47;
+  --accent-soft: #E2EFEC;
+  --ok:          #2F7D3A;
+  --ok-soft:     #E4F1E4;
+  --warn:        #8A5E0E;
+  --warn-soft:   #F6EEDC;
+  --danger:      #A8342C;
+  --danger-soft: #F7E6E4;
+  --shadow:      0 1px 2px rgba(22, 33, 31, .05), 0 8px 24px -16px rgba(22, 33, 31, .28);
+}
+
+/* ==========================================================================
+   BASE
+   ========================================================================== */
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 3px;
+}
+a:hover { text-decoration-color: var(--accent); }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+html { scroll-behavior: smooth; }
+
+/* ==========================================================================
+   ESTRUCTURA
+   ========================================================================== */
+.shell {
+  display: grid;
+  grid-template-columns: 15rem minmax(0, 1fr);
+  gap: 4rem;
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 0 2rem 8rem;
+}
+
+main { min-width: 0; max-width: var(--measure); }
+
+/* ---- Barra lateral ---- */
+.rail {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: 100vh;
+  overflow-y: auto;
+  padding: 3.5rem 0 3rem;
+  font-family: var(--sans);
+  font-size: .8125rem;
+  line-height: 1.4;
+}
+
+.rail-brand {
+  font-family: var(--mono);
+  font-size: .6875rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--rule);
+}
+
+.rail nav ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .125rem;
+  counter-reset: rail;
+}
+
+.rail nav a {
+  display: flex;
+  gap: .6rem;
+  padding: .35rem .6rem .35rem .5rem;
+  border-radius: 3px;
+  color: var(--ink-2);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: color .12s, background-color .12s, border-color .12s;
+}
+.rail nav a::before {
+  counter-increment: rail;
+  content: counter(rail, decimal-leading-zero);
+  font-family: var(--mono);
+  font-size: .6875rem;
+  color: var(--ink-3);
+  padding-top: .15em;
+  flex: none;
+}
+.rail nav a:hover { color: var(--ink); background: var(--bg-sunken); }
+.rail nav a[aria-current="true"] {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.rail nav a[aria-current="true"]::before { color: var(--accent); }
+
+.rail-foot {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  align-items: flex-start;
+}
+
+.theme-toggle {
+  font: inherit;
+  font-family: var(--mono);
+  font-size: .6875rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  background: none;
+  border: 1px solid var(--rule-strong);
+  color: var(--ink-2);
+  padding: .3rem .6rem;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ==========================================================================
+   PORTADA
+   ========================================================================== */
+.masthead {
+  padding: 5rem 0 3rem;
+  border-bottom: 3px double var(--rule-strong);
+  margin-bottom: 3.5rem;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: .6875rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 1.25rem;
+}
+
+.masthead h1 {
+  font-family: var(--mono);
+  font-size: clamp(2rem, 5.5vw, 3.1rem);
+  font-weight: 600;
+  line-height: 1.06;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+  margin: 0 0 1.25rem;
+}
+
+.deck {
+  font-size: 1.2rem;
+  line-height: 1.55;
+  color: var(--ink-2);
+  margin: 0 0 2rem;
+  max-width: 58ch;
+}
+
+.masthead-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem 1.75rem;
+  font-family: var(--mono);
+  font-size: .75rem;
+  color: var(--ink-3);
+}
+.masthead-meta b { color: var(--ink-2); font-weight: 500; }
+
+/* ==========================================================================
+   TIPOGRAFÍA DE CONTENIDO
+   ========================================================================== */
+section { padding-bottom: 4rem; scroll-margin-top: 2rem; }
+
+h2 {
+  font-family: var(--mono);
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: -.015em;
+  line-height: 1.2;
+  text-wrap: balance;
+  margin: 0 0 .35rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.h2-kicker {
+  font-family: var(--mono);
+  font-size: .6875rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin: 0 0 2rem;
+}
+
+h3 {
+  font-family: var(--sans);
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: -.005em;
+  line-height: 1.3;
+  text-wrap: balance;
+  margin: 2.75rem 0 .75rem;
+}
+
+h4 {
+  font-family: var(--mono);
+  font-size: .8125rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  margin: 2rem 0 .5rem;
+  color: var(--ink-2);
+}
+
+p { margin: 0 0 1.1rem; }
+p:last-child { margin-bottom: 0; }
+
+ul, ol { margin: 0 0 1.25rem; padding-left: 1.35rem; }
+li { margin-bottom: .5rem; }
+li:last-child { margin-bottom: 0; }
+li > ul, li > ol { margin-top: .5rem; margin-bottom: 0; }
+
+strong { font-weight: 650; color: var(--ink); }
+
+code {
+  font-family: var(--mono);
+  font-size: .855em;
+  background: var(--bg-sunken);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: .1em .35em;
+  white-space: nowrap;
+}
+a code { color: inherit; }
+
+/* ==========================================================================
+   BLOQUES DE CÓDIGO
+   ========================================================================== */
+.code {
+  margin: 1.5rem 0;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .45rem .75rem .45rem .9rem;
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: .6875rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.copy {
+  font: inherit;
+  letter-spacing: .08em;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--ink-3);
+  padding: .15rem .45rem;
+  cursor: pointer;
+  flex: none;
+}
+.copy:hover { color: var(--accent); border-color: var(--rule-strong); }
+.copy[data-done="1"] { color: var(--ok); }
+
+.code pre {
+  margin: 0;
+  padding: .9rem 1.1rem;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: .82rem;
+  line-height: 1.7;
+  color: var(--ink);
+  tab-size: 2;
+}
+.code pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+  white-space: pre;
+}
+
+/* Coloreado mínimo y manual: solo lo que ayuda a leer. */
+.c  { color: var(--ink-3); font-style: italic; }   /* comentario */
+.k  { color: var(--accent); }                       /* palabra clave / prompt */
+.s  { color: var(--warn); }                         /* string */
+.hl { background: var(--accent-soft); border-radius: 2px; padding: 0 .2em; }
+
+/* ==========================================================================
+   TABLAS
+   ========================================================================== */
+.tablewrap {
+  margin: 1.5rem 0;
+  overflow-x: auto;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--surface);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--sans);
+  font-size: .875rem;
+  line-height: 1.5;
+}
+
+th {
+  text-align: left;
+  font-weight: 600;
+  font-size: .6875rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  background: var(--bg-sunken);
+  padding: .6rem .9rem;
+  border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+
+td {
+  padding: .65rem .9rem;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+  color: var(--ink-2);
+}
+tbody tr:last-child td { border-bottom: 0; }
+td strong, td b { color: var(--ink); }
+td code { white-space: nowrap; }
+
+.t-num { font-variant-numeric: tabular-nums; text-align: right; }
+
+/* ==========================================================================
+   CHIPS DE ESTADO HTTP
+   ========================================================================== */
+.chip {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: .75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: .1rem .45rem;
+  border-radius: 3px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.chip-ok     { color: var(--ok);     background: var(--ok-soft);     border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
+.chip-warn   { color: var(--warn);   background: var(--warn-soft);   border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+.chip-danger { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+.chip-mute   { color: var(--ink-3);  background: var(--bg-sunken);   border-color: var(--rule); }
+
+/* ==========================================================================
+   NOTAS
+   ========================================================================== */
+.note {
+  margin: 1.5rem 0;
+  padding: .9rem 1.1rem;
+  border-left: 3px solid var(--rule-strong);
+  background: var(--bg-sunken);
+  border-radius: 0 4px 4px 0;
+  font-size: .9375rem;
+}
+.note > :first-child { margin-top: 0; }
+.note-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: .6875rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: .35rem;
+}
+.note-key    { border-left-color: var(--accent); background: var(--accent-soft); }
+.note-key .note-label { color: var(--accent); }
+.note-trap   { border-left-color: var(--danger); background: var(--danger-soft); }
+.note-trap .note-label { color: var(--danger); }
+
+/* ==========================================================================
+   DIAGRAMA DE FLUJO  (secuencia real: la numeración informa el orden)
+   ========================================================================== */
+.flow {
+  margin: 2rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  counter-reset: step;
+}
+
+.flow-step {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 1rem;
+  padding-bottom: 1.4rem;
+  position: relative;
+}
+.flow-step:last-child { padding-bottom: 0; }
+
+.flow-step::before {
+  counter-increment: step;
+  content: counter(step);
+  grid-column: 1;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-size: .8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: 50%;
+  z-index: 1;
+}
+
+/* La línea que une los pasos */
+.flow-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 1rem;
+  top: 2rem;
+  bottom: 0;
+  width: 1px;
+  background: var(--rule-strong);
+}
+
+.flow-body { grid-column: 2; padding-top: .1rem; }
+.flow-body h4 { margin: 0 0 .3rem; font-family: var(--sans); font-size: .9375rem; font-weight: 650; color: var(--ink); letter-spacing: 0; }
+.flow-body p  { margin: 0; font-size: .9375rem; color: var(--ink-2); }
+.flow-body p + p { margin-top: .5rem; }
+.flow-actor {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: .625rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 0 .35rem;
+  margin-left: .5rem;
+  vertical-align: .12em;
+}
+
+/* ==========================================================================
+   ANATOMÍA DEL JWT
+   ========================================================================== */
+.jwt {
+  margin: 1.5rem 0;
+  padding: 1rem 1.1rem;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  font-family: var(--mono);
+  font-size: .8125rem;
+  line-height: 1.9;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.jwt-h { color: var(--accent); }
+.jwt-p { color: var(--warn); }
+.jwt-s { color: var(--ink-3); }
+.jwt-dot { color: var(--ink); font-weight: 700; }
+
+.jwt-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem 1.5rem;
+  margin: -.5rem 0 1.5rem;
+  font-family: var(--sans);
+  font-size: .8125rem;
+  color: var(--ink-2);
+}
+.jwt-legend span { display: flex; align-items: center; gap: .4rem; }
+.jwt-legend i {
+  width: .6rem; height: .6rem; border-radius: 2px; flex: none;
+  font-style: normal;
+}
+
+/* ==========================================================================
+   COMPARATIVA DE DOS COLUMNAS
+   ========================================================================== */
+.split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+.split > div {
+  padding: .9rem 1.1rem;
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--surface);
+  font-size: .9375rem;
+}
+.split h4 { margin: 0 0 .5rem; }
+.split p:last-child { margin-bottom: 0; }
+.split-good h4 { color: var(--ok); }
+.split-bad h4  { color: var(--danger); }
+
+/* ==========================================================================
+   BALANCE  (ventajas / desventajas)
+   ========================================================================== */
+.ledger {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: 1.25rem;
+  margin: 1.5rem 0;
+}
+.ledger section { padding: 0; }
+.ledger-col {
+  border: 1px solid var(--rule);
+  border-radius: 5px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.ledger-col > h3 {
+  margin: 0;
+  padding: .55rem .95rem;
+  font-family: var(--mono);
+  font-size: .6875rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  background: var(--bg-sunken);
+  border-bottom: 1px solid var(--rule);
+}
+.ledger-pro > h3 { color: var(--ok); }
+.ledger-con > h3 { color: var(--danger); }
+.ledger-col dl { margin: 0; padding: .85rem .95rem; font-size: .9375rem; }
+.ledger-col dt { font-family: var(--sans); font-weight: 650; font-size: .875rem; margin-bottom: .15rem; }
+.ledger-col dd { margin: 0 0 .9rem; color: var(--ink-2); font-size: .875rem; line-height: 1.5; }
+.ledger-col dd:last-child { margin-bottom: 0; }
+
+/* ==========================================================================
+   PIE
+   ========================================================================== */
+.colophon {
+  border-top: 3px double var(--rule-strong);
+  padding-top: 2rem;
+  font-family: var(--sans);
+  font-size: .8125rem;
+  color: var(--ink-3);
+}
+.colophon p { margin-bottom: .6rem; }
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+.rail-mobile { display: none; }
+
+@media (max-width: 60rem) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 1.25rem 5rem; }
+  .rail { display: none; }
+  .rail-mobile { display: block; }
+  main { max-width: none; }
+  body { font-size: 16px; }
+  .masthead { padding-top: 2.5rem; }
+}
+
+.rail-mobile {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--rule);
+  margin: 0 -1.25rem 0;
+  padding: 0 1.25rem;
+}
+.rail-mobile summary {
+  cursor: pointer;
+  padding: .8rem 0;
+  font-family: var(--mono);
+  font-size: .75rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.rail-mobile ol {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .1rem;
+  counter-reset: railm;
+  font-family: var(--sans);
+  font-size: .875rem;
+}
+.rail-mobile a { display: block; padding: .3rem 0; color: var(--ink-2); text-decoration: none; }
+.rail-mobile a::before {
+  counter-increment: railm;
+  content: counter(railm, decimal-leading-zero) "  ";
+  font-family: var(--mono);
+  font-size: .75rem;
+  color: var(--ink-3);
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ===================================================================
+       BARRA LATERAL
+       =================================================================== -->
+  <aside class="rail">
+    <div class="rail-brand">Cows&nbsp;vs&nbsp;Clowns<br>Keycloak</div>
+    <nav aria-label="Secciones">
+      <ol>
+        <li><a href="#por-que">Por qué no escribir tu propio login</a></li>
+        <li><a href="#balance">Ventajas y desventajas</a></li>
+        <li><a href="#conceptos">Los conceptos de Keycloak</a></li>
+        <li><a href="#token">Qué es un token, por dentro</a></li>
+        <li><a href="#arquitectura">Cómo encaja en este proyecto</a></li>
+        <li><a href="#codigo">Las piezas de código</a></li>
+        <li><a href="#permisos">La tabla de permisos</a></li>
+        <li><a href="#probarlo">Cómo probarlo</a></li>
+        <li><a href="#fallos">Cuando algo falla</a></li>
+        <li><a href="#tests">Cómo se testea sin Keycloak</a></li>
+        <li><a href="#produccion">Qué falta para producción</a></li>
+      </ol>
+    </nav>
+    <div class="rail-foot">
+      <button class="theme-toggle" id="theme-toggle" type="button">Tema</button>
+      <a href="docs/reportes/pruebas/index.html">Reporte de pruebas</a>
+      <a href="docs/reportes/cobertura/index.html">Reporte de cobertura</a>
+    </div>
+  </aside>
+
+  <main>
+
+    <details class="rail-mobile">
+      <summary>Secciones</summary>
+      <ol>
+        <li><a href="#por-que">Por qué no escribir tu propio login</a></li>
+        <li><a href="#balance">Ventajas y desventajas</a></li>
+        <li><a href="#conceptos">Los conceptos de Keycloak</a></li>
+        <li><a href="#token">Qué es un token, por dentro</a></li>
+        <li><a href="#arquitectura">Cómo encaja en este proyecto</a></li>
+        <li><a href="#codigo">Las piezas de código</a></li>
+        <li><a href="#permisos">La tabla de permisos</a></li>
+        <li><a href="#probarlo">Cómo probarlo</a></li>
+        <li><a href="#fallos">Cuando algo falla</a></li>
+        <li><a href="#tests">Cómo se testea sin Keycloak</a></li>
+        <li><a href="#produccion">Qué falta para producción</a></li>
+      </ol>
+    </details>
+
+    <!-- ===================================================================
+         PORTADA
+         =================================================================== -->
+    <header class="masthead">
+      <p class="eyebrow">Autenticación y autorización</p>
+      <h1>Keycloak en Cows&nbsp;vs&nbsp;Clowns</h1>
+      <p class="deck">
+        Qué es Keycloak, por qué se eligió en vez de programar el login a mano,
+        cómo está montado en esta API y cómo comprobar, comando por comando, que
+        de verdad protege lo que dice proteger.
+      </p>
+      <div class="masthead-meta">
+        <span><b>API</b> Spring Boot 4.1 · Java 25</span>
+        <span><b>Identidad</b> Keycloak 26.7</span>
+        <span><b>Realm</b> cowsvsclown</span>
+      </div>
+    </header>
+
+    <!-- ===================================================================
+         1. POR QUÉ
+         =================================================================== -->
+    <section id="por-que">
+      <h2>Por qué no escribir tu propio login</h2>
+      <p class="h2-kicker">El problema que parece fácil</p>
+
+      <p>
+        Visto desde afuera, agregarle login a una API parece una tarde de trabajo:
+        una tabla <code>usuarios</code> con un correo y una contraseña, un endpoint
+        <code>/login</code> que compara, y listo. Esa intuición es la razón por la
+        que existen tantas bases de datos de contraseñas circulando por internet.
+      </p>
+
+      <p>
+        La lista de abajo no es teoría: es lo que hay que resolver <em>bien</em>
+        para que un login sencillo no sea un agujero. Cada línea es una decisión
+        que se puede tomar mal en silencio, sin que nada falle ni aparezca en los
+        logs, hasta que alguien la aprovecha.
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Lo que hay que resolver</th>
+              <th>Qué pasa si se hace mal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Hasheo de contraseñas</b><br>bcrypt, scrypt o Argon2id, con salt por usuario y un coste calibrado</td>
+              <td>Guardarlas en claro, o con MD5/SHA-1, convierte una filtración de la base en una filtración de todas las cuentas — y de las cuentas que esa gente tenga en otros sitios, porque reutilizan contraseña</td>
+            </tr>
+            <tr>
+              <td><b>Comparación en tiempo constante</b></td>
+              <td>Un <code>equals</code> normal tarda distinto según cuántos caracteres coincidan. Eso es medible por la red y se convierte en una forma de adivinar</td>
+            </tr>
+            <tr>
+              <td><b>Límite de intentos y bloqueo</b></td>
+              <td>Sin él, probar contraseñas comunes contra todos los usuarios es cuestión de dejar un script corriendo una noche</td>
+            </tr>
+            <tr>
+              <td><b>No revelar si el usuario existe</b></td>
+              <td>Si «usuario no encontrado» y «contraseña incorrecta» se distinguen (por el mensaje <em>o por el tiempo de respuesta</em>), se puede enumerar quién tiene cuenta</td>
+            </tr>
+            <tr>
+              <td><b>Recuperación de contraseña</b><br>token de un solo uso, con vencimiento corto, invalidado al usarse</td>
+              <td>Es la puerta trasera favorita: un token predecible, sin vencimiento o reutilizable convierte el «olvidé mi contraseña» en un «entrá a cualquier cuenta»</td>
+            </tr>
+            <tr>
+              <td><b>Gestión de sesiones</b><br>expiración, renovación, cierre de sesión que de verdad cierre</td>
+              <td>Sesiones eternas, o que sobreviven al cambio de contraseña, o que no se pueden revocar cuando alguien roba el dispositivo</td>
+            </tr>
+            <tr>
+              <td><b>Segundo factor</b></td>
+              <td>Sin MFA, una contraseña filtrada es acceso total. Implementar TOTP correctamente (ventanas de tiempo, códigos de respaldo, resistencia a repetición) es un proyecto en sí mismo</td>
+            </tr>
+            <tr>
+              <td><b>Auditoría</b></td>
+              <td>Cuando algo pasa, no hay forma de saber quién entró, desde dónde, ni cuándo</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Nada de eso es imposible. El punto es otro: <strong>es un problema ya
+        resuelto</strong>, resuelto por gente que se dedica a eso a tiempo
+        completo, auditado por terceros y parcheado cuando aparece una
+        vulnerabilidad nueva. Reimplementarlo no aporta nada al proyecto —
+        acá el proyecto son vacas y payasos, no criptografía— y sí aporta una
+        superficie de ataque que hay que mantener para siempre.
+      </p>
+
+      <div class="note note-key">
+        <span class="note-label">La idea de fondo</span>
+        <p>
+          Delegar el login no es pereza: es reconocer que la parte difícil de la
+          seguridad no es escribir el código, sino <em>seguir teniéndolo bien</em>
+          dentro de tres años, con dos vulnerabilidades nuevas publicadas y nadie
+          del equipo original en el proyecto.
+        </p>
+      </div>
+
+      <h3>Qué queda de nuestro lado igual</h3>
+      <p>
+        Keycloak resuelve <b>quién sos</b> (autenticación). No resuelve
+        <b>qué podés hacer</b> en este dominio (autorización), porque eso depende
+        de reglas de negocio que solo conoce la aplicación: que borrar una vaca sea
+        más grave que renombrarla es una decisión nuestra, no de Keycloak. Esa
+        parte sigue viviendo en el código, en
+        <code>SecurityConfig</code>, y está en la
+        <a href="#permisos">tabla de permisos</a>.
+      </p>
+    </section>
+
+    <!-- ===================================================================
+         2. BALANCE
+         =================================================================== -->
+    <section id="balance">
+      <h2>Ventajas y desventajas</h2>
+      <p class="h2-kicker">El balance honesto</p>
+
+      <p>
+        Keycloak no es gratis en el sentido que importa: no cuesta dinero, pero sí
+        cuesta un servicio más que operar. Vale la pena verlo de los dos lados
+        antes de decir que sí.
+      </p>
+
+      <div class="ledger">
+        <div class="ledger-col ledger-pro">
+          <h3>A favor</h3>
+          <dl>
+            <dt>Todo lo de la lista anterior, resuelto</dt>
+            <dd>Hasheo moderno, bloqueo por fuerza bruta, MFA, recuperación de contraseña, políticas, auditoría. Cero líneas de código.</dd>
+
+            <dt>Estándares, no un invento propio</dt>
+            <dd>Habla OpenID Connect, OAuth 2.0 y SAML. Eso significa que Spring Security ya sabe hablar con él, y que cambiarlo mañana por Auth0 o Cognito es cambiar dos URLs, no reescribir la aplicación.</dd>
+
+            <dt>Single Sign-On</dt>
+            <dd>Un login sirve para todas las aplicaciones del mismo realm. Si mañana hay un panel de administración aparte, el usuario ya está autenticado.</dd>
+
+            <dt>Federación de identidades</dt>
+            <dd>Puede delegar a su vez en el LDAP o el Active Directory de una empresa, o en «entrar con Google / GitHub», sin tocar la API.</dd>
+
+            <dt>Consola de administración</dt>
+            <dd>Crear usuarios, asignar roles, ver sesiones activas y revocarlas: todo por interfaz. No hace falta un CRUD de usuarios propio ni entrar a la base a mano.</dd>
+
+            <dt>Tokens de vida corta y verificación local</dt>
+            <dd>La API valida cada token sola, con la llave pública del realm. Ni una llamada de red por petición, y no se cae si Keycloak se cae.</dd>
+
+            <dt>Open source, sin ataduras</dt>
+            <dd>Apache 2.0, respaldado por Red Hat. Se puede autoalojar, no hay factura por usuario activo ni un proveedor que suba el precio.</dd>
+          </dl>
+        </div>
+
+        <div class="ledger-col ledger-con">
+          <h3>En contra</h3>
+          <dl>
+            <dt>Una pieza más de infraestructura</dt>
+            <dd>Hay que levantarlo, actualizarlo, respaldarlo y monitorearlo. En producción, además, con su propia base de datos.</dd>
+
+            <dt>Pesa</dt>
+            <dd>Entre 400&nbsp;MB y 1&nbsp;GB de RAM, y entre 20 y 40 segundos de arranque. Para una API que ocupa 300&nbsp;MB, el servidor de identidad es la parte más grande del sistema.</dd>
+
+            <dt>Curva de aprendizaje real</dt>
+            <dd>Realm, cliente, scope, mapper, flujo, rol compuesto, grupo. Son muchos conceptos antes de ver el primer token, y la documentación oficial asume que ya conocés OAuth 2.0.</dd>
+
+            <dt>La configuración tiene trampas</dt>
+            <dd><code>hostname</code>, proxies inversos, HTTPS y las URLs internas contra las públicas son la fuente de la mayoría de los problemas. La <a href="#dos-urls">trampa de las dos URLs</a> de más abajo es exactamente eso.</dd>
+
+            <dt>Actualizaciones con cambios incompatibles</dt>
+            <dd>Entre versiones mayores cambian nombres de variables y se eliminan opciones. Sin ir más lejos, en la&nbsp;26 <code>KEYCLOAK_ADMIN</code> pasó a ser <code>KC_BOOTSTRAP_ADMIN_USERNAME</code>, y con el nombre viejo el contenedor arranca sin administrador.</dd>
+
+            <dt>Excesivo para lo trivial</dt>
+            <dd>Para una herramienta interna con tres usuarios de confianza, montar Keycloak es traer un camión para mudar una silla.</dd>
+          </dl>
+        </div>
+      </div>
+
+      <h3>Las alternativas, y por qué no</h3>
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Opción</th><th>Qué es</th><th>Por qué no acá</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><b>Login propio</b></td>
+              <td>Tabla de usuarios y <code>BCryptPasswordEncoder</code> de Spring Security</td>
+              <td>Todo lo de la sección anterior queda por hacer, y el proyecto no trata sobre eso</td>
+            </tr>
+            <tr>
+              <td><b>Auth0 / Okta</b></td>
+              <td>El mismo servicio, pero alojado por un tercero</td>
+              <td>Excelentes, pero se paga por usuario activo y hace falta cuenta e internet. Para un proyecto de clase, no</td>
+            </tr>
+            <tr>
+              <td><b>AWS Cognito</b></td>
+              <td>Equivalente dentro de AWS</td>
+              <td>Ata el proyecto a un proveedor y no se puede levantar en local con un <code>docker compose up</code></td>
+            </tr>
+            <tr>
+              <td><b>Spring Authorization Server</b></td>
+              <td>Servidor OAuth2 como una librería de Spring</td>
+              <td>Da los tokens, pero la gestión de usuarios, la consola y el MFA siguen siendo tarea nuestra. Es una pieza, no un producto</td>
+            </tr>
+            <tr>
+              <td><b>Zitadel, Authentik, Ory</b></td>
+              <td>Competencia directa, también open source</td>
+              <td>Válidas. Keycloak gana por ser la más difundida: cuando algo falla, el error ya está preguntado y respondido en algún lado</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         3. CONCEPTOS
+         =================================================================== -->
+    <section id="conceptos">
+      <h2>Los conceptos de Keycloak</h2>
+      <p class="h2-kicker">El vocabulario mínimo</p>
+
+      <p>
+        Casi toda la confusión inicial con Keycloak viene de cinco palabras. Vale
+        la pena fijarlas antes de mirar configuración.
+      </p>
+
+      <h3>Realm — el universo aislado</h3>
+      <p>
+        Un <b>realm</b> es un conjunto cerrado de usuarios, roles, clientes y
+        políticas. Los realms no se ven entre sí: un usuario del realm
+        <code>cowsvsclown</code> sencillamente <em>no existe</em> para otro realm,
+        aunque se llame igual. Es la unidad de aislamiento.
+      </p>
+      <p>
+        Todo Keycloak trae un realm especial llamado <code>master</code>, que es
+        solo para administrar el propio Keycloak. <strong>Las aplicaciones nunca
+        se conectan al realm master</strong>: se crea uno propio y ahí viven sus
+        usuarios. En este proyecto ese realm es <code>cowsvsclown</code>, y está
+        definido entero en <code>keycloak/realm-cowsvsclown.json</code>, un
+        archivo del repositorio que se importa solo al levantar los contenedores.
+      </p>
+      <p>
+        Cada realm firma sus tokens con su propio par de llaves. De ahí sale la URL
+        que aparece por todos lados:
+      </p>
+      <div class="code">
+        <div class="code-head"><span>URL del realm</span><button class="copy" type="button">Copiar</button></div>
+<pre><code>http://localhost:8081/realms/cowsvsclown
+<span class="c">│                    │        └── el realm</span>
+<span class="c">│                    └── siempre "realms"</span>
+<span class="c">└── dónde vive Keycloak</span></code></pre>
+      </div>
+
+      <h3>Client — quién pide el token</h3>
+      <p>
+        Un <b>cliente</b> es una aplicación registrada en el realm. No es un
+        usuario: es el <em>programa</em> que pide tokens en nombre de un usuario.
+        Acá el cliente se llama <code>cowsvsclown-api</code> y lo usan tanto
+        Swagger como los <code>curl</code> de prueba.
+      </p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Tipo</th><th>Tiene secreto</th><th>Cuándo se usa</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>Público</b></td>
+              <td>No</td>
+              <td>Cuando el código corre en un sitio donde el usuario puede leerlo: navegador, app móvil, Swagger. Un secreto ahí no sería secreto. La seguridad la aporta PKCE. <b>Es el caso de este proyecto.</b></td>
+            </tr>
+            <tr>
+              <td><b>Confidencial</b></td>
+              <td>Sí</td>
+              <td>Cuando el código corre en un servidor que controlás y el secreto no sale de ahí</td>
+            </tr>
+            <tr>
+              <td><b>Bearer-only</b></td>
+              <td>—</td>
+              <td>Una API que solo <em>recibe</em> tokens y nunca los pide. Conceptualmente es lo que hace esta API; ya no hace falta declararlo así en Keycloak</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Roles — qué puede hacer alguien</h3>
+      <p>
+        Un <b>rol</b> es una etiqueta que se le cuelga a un usuario y que viaja
+        dentro del token. Keycloak distingue dos clases, y la diferencia importa
+        porque viajan en <em>lugares distintos</em> del token:
+      </p>
+      <div class="split">
+        <div>
+          <h4>Roles de realm</h4>
+          <p>Globales al realm. Viajan en <code>realm_access.roles</code>.</p>
+          <p>Son los que usa este proyecto: <code>USER</code> y <code>ADMIN</code>.</p>
+        </div>
+        <div>
+          <h4>Roles de cliente</h4>
+          <p>Propios de una aplicación. Viajan en
+             <code>resource_access.&lt;cliente&gt;.roles</code>.</p>
+          <p>Sirven cuando un mismo realm atiende varias apps y «administrador»
+             significa cosas distintas en cada una.</p>
+        </div>
+      </div>
+      <p>
+        Un rol puede ser <b>compuesto</b>: contener otros. Acá <code>ADMIN</code>
+        contiene a <code>USER</code>, así que a quien tenga <code>ADMIN</code> no
+        hay que darle <code>USER</code> aparte — Keycloak lo expande solo al armar
+        el token. Es lo que evita tener que enumerar todos los roles heredados en
+        cada usuario.
+      </p>
+      <p>
+        También existen los <b>grupos</b>, que son bolsas de usuarios con roles
+        asociados: en vez de darle cinco roles a cada nuevo empleado, se lo mete en
+        el grupo «Soporte». Este proyecto no los usa porque con tres usuarios no
+        aportan nada, pero es la forma normal de escalar.
+      </p>
+
+      <h3>Flujos — cómo se consigue el token</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Flujo</th><th>Cómo funciona</th><th>Acá</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>Authorization&nbsp;Code + PKCE</b></td>
+              <td>La app te manda a la pantalla de Keycloak, te logueás ahí y volvés con un código de un solo uso que se canjea por el token. <strong>La app nunca ve tu contraseña.</strong></td>
+              <td>Sí — es lo que usa el botón <b>Authorize</b> de Swagger</td>
+            </tr>
+            <tr>
+              <td><b>Password&nbsp;Grant</b><br><span style="color:var(--ink-3)">(ROPC)</span></td>
+              <td>Le mandás usuario y contraseña directo al endpoint <code>/token</code>. Sin navegador</td>
+              <td>Sí, solo para poder probar con <code>curl</code>. Desaconsejado fuera de desarrollo: obliga a que el cliente vea la contraseña</td>
+            </tr>
+            <tr>
+              <td><b>Client&nbsp;Credentials</b></td>
+              <td>Una máquina se autentica como sí misma, sin usuario detrás</td>
+              <td>No. Sería lo correcto para un cron o un servicio que llame a la API</td>
+            </tr>
+            <tr>
+              <td><b>Implicit</b></td>
+              <td>El token vuelve directo en la URL</td>
+              <td>No. Está obsoleto: el token queda en el historial del navegador y en los logs del servidor</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Protocol mappers — qué se mete en el token</h3>
+      <p>
+        Un <b>mapper</b> decide qué información concreta viaja dentro del token.
+        Los roles llegan por un mapper; el correo, por otro. En este realm hay uno
+        agregado a mano, el de <em>audiencia</em>, que escribe
+        <code>"aud": "cowsvsclown-api"</code>: sirve para poder exigir que un token
+        emitido para otra aplicación del mismo realm no valga acá.
+      </p>
+    </section>
+
+    <!-- ===================================================================
+         4. EL TOKEN
+         =================================================================== -->
+    <section id="token">
+      <h2>Qué es un token, por dentro</h2>
+      <p class="h2-kicker">Anatomía de un JWT</p>
+
+      <p>
+        Un <b>JWT</b> (JSON Web Token) son tres bloques de texto separados por
+        puntos. Cada bloque es JSON codificado en Base64:
+      </p>
+
+      <div class="jwt">
+        <span class="jwt-h">eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9</span><span class="jwt-dot">.</span><span class="jwt-p">eyJpc3MiOiJodHRwOi8vbG9jYWxob3N0OjgwODEvcmVhbG1zL2Nvd3N2c2Nsb3duIiwicHJl…</span><span class="jwt-dot">.</span><span class="jwt-s">POstGetfAytaZS82wHcjoTyoqhMyxXiWdR7Nn7A29DNSl0EiXLdwJ6xC6AfgZWF1bOsS…</span>
+      </div>
+      <div class="jwt-legend">
+        <span><i style="background:var(--accent)"></i> Cabecera — con qué algoritmo se firmó</span>
+        <span><i style="background:var(--warn)"></i> Contenido — quién sos y qué podés</span>
+        <span><i style="background:var(--ink-3)"></i> Firma — la prueba de que no fue alterado</span>
+      </div>
+
+      <div class="note note-trap">
+        <span class="note-label">El malentendido más común</span>
+        <p>
+          Un JWT <strong>no está cifrado</strong>. Cualquiera que lo tenga puede
+          leer su contenido: Base64 no es criptografía, es una forma de escribir.
+          Lo que la firma garantiza no es secreto, es <em>integridad</em>: que
+          nadie pudo cambiar un <code>"USER"</code> por un <code>"ADMIN"</code>
+          sin invalidarla.
+        </p>
+        <p>
+          De ahí se siguen dos reglas: nunca meter datos sensibles en un token, y
+          tratarlo como una contraseña — quien lo roba, entra.
+        </p>
+      </div>
+
+      <p>Este es el contenido real de un token de <code>admin</code> en este realm:</p>
+
+      <div class="code">
+        <div class="code-head"><span>Contenido del token (recortado)</span><button class="copy" type="button">Copiar</button></div>
+<pre><code>{
+  <span class="k">"iss"</span>: <span class="s">"http://localhost:8081/realms/cowsvsclown"</span>,  <span class="c">// quién lo emitió</span>
+  <span class="k">"aud"</span>: <span class="s">"cowsvsclown-api"</span>,                             <span class="c">// para quién es</span>
+  <span class="k">"exp"</span>: 1785012345,                                    <span class="c">// cuándo vence</span>
+  <span class="k">"iat"</span>: 1785012045,                                    <span class="c">// cuándo se emitió</span>
+  <span class="k">"sub"</span>: <span class="s">"8f14e45f-ceea-4f2b-9c1d-3a7b21e0c9d4"</span>,      <span class="c">// id interno del usuario</span>
+  <span class="k">"preferred_username"</span>: <span class="s">"admin"</span>,                     <span class="c">// el nombre legible</span>
+
+  <span class="k">"realm_access"</span>: {
+    <span class="k">"roles"</span>: [<span class="s">"ADMIN"</span>, <span class="s">"USER"</span>]                        <span class="c">// &lt;-- lo que lee la API</span>
+  },
+  <span class="k">"resource_access"</span>: {
+    <span class="k">"cowsvsclown-api"</span>: { <span class="k">"roles"</span>: [] }
+  },
+  <span class="k">"scope"</span>: <span class="s">"openid profile email"</span>
+}</code></pre>
+      </div>
+
+      <h3>Los tres tokens que devuelve Keycloak</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Token</th><th>Para qué</th><th>Dura</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><b>access_token</b></td>
+              <td>El que se manda en cada petición a la API, en la cabecera <code>Authorization</code>. Es el único que le importa a Spring Security</td>
+              <td class="t-num">5&nbsp;min</td>
+            </tr>
+            <tr>
+              <td><b>refresh_token</b></td>
+              <td>Sirve para pedir un <code>access_token</code> nuevo cuando el anterior vence, sin volver a escribir la contraseña. Nunca se manda a la API</td>
+              <td class="t-num">30&nbsp;min</td>
+            </tr>
+            <tr>
+              <td><b>id_token</b></td>
+              <td>Datos del usuario para mostrarlos en pantalla («Hola, Ana»). Es de OpenID Connect, no de OAuth2. Tampoco se manda a la API</td>
+              <td class="t-num">5&nbsp;min</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Que el <code>access_token</code> dure <b>solo 5 minutos</b> es
+        deliberado, y es la contrapartida de validarlo sin consultar a Keycloak:
+        si a un usuario lo deshabilitan, su token sigue funcionando hasta que
+        vence. Cuanto más corto, más chica es esa ventana.
+      </p>
+    </section>
+
+    <!-- ===================================================================
+         5. ARQUITECTURA
+         =================================================================== -->
+    <section id="arquitectura">
+      <h2>Cómo encaja en este proyecto</h2>
+      <p class="h2-kicker">Tres contenedores y un recorrido</p>
+
+      <p>
+        La API es un <b>resource server</b>: no tiene login, ni formulario, ni
+        tabla de usuarios, ni contraseñas. Solo recibe tokens y decide si dejan
+        pasar. Quien los emite es Keycloak.
+      </p>
+
+      <div class="code">
+        <div class="code-head"><span>docker compose</span></div>
+<pre><code>          tu navegador / tu terminal
+                     │
+        ┌────────────┴────────────┐
+        │                         │
+        ▼                         ▼
+  <span class="k">localhost:8080</span>            <span class="k">localhost:8081</span>
+  ┌──────────────┐          ┌──────────────┐
+  │     app      │          │   keycloak   │
+  │  Spring Boot │          │  usuarios    │
+  │  valida JWT  │          │  roles       │
+  └──────┬───────┘          │  contraseñas │
+         │                  └──────▲───────┘
+         │  keycloak:8080          │
+         └─────────────────────────┘
+         (baja las llaves públicas
+          UNA vez, y las cachea)
+         │
+         ▼
+  ┌──────────────┐
+  │      db      │  Postgres — vacas, payasos, dueños
+  └──────────────┘</code></pre>
+      </div>
+
+      <h3>El recorrido de una petición protegida</h3>
+
+      <div class="flow">
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>El usuario se autentica<span class="flow-actor">Keycloak</span></h4>
+            <p>Escribe usuario y contraseña en la pantalla de Keycloak (o los manda al endpoint <code>/token</code>). Keycloak los verifica contra su base y devuelve un JWT firmado con la llave privada del realm.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Llama a la API con el token<span class="flow-actor">Cliente</span></h4>
+            <p>El token viaja en una cabecera: <code>Authorization: Bearer eyJhbGciOi…</code></p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>La API valida el token<span class="flow-actor">Spring Security</span></h4>
+            <p>Sin preguntarle nada a Keycloak. Le alcanza con la llave <em>pública</em> del realm, que descargó una vez y tiene cacheada. Comprueba tres cosas:</p>
+            <p><b>La firma</b> corresponde a esa llave, así que el token no fue fabricado ni alterado. <b>No venció</b> (claim <code>exp</code>). <b>Lo emitió el realm esperado</b> (claim <code>iss</code>).</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Traduce los roles<span class="flow-actor">KeycloakRoleConverter</span></h4>
+            <p>Lee <code>realm_access.roles</code> y lo convierte en las autoridades que Spring entiende: <code>ROLE_ADMIN</code>, <code>ROLE_USER</code>. Esta pieza hubo que escribirla; el porqué está <a href="#converter">más abajo</a>.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Aplica las reglas<span class="flow-actor">SecurityConfig</span></h4>
+            <p>Compara el método y la ruta contra la <a href="#permisos">tabla de permisos</a>. Si pasa, el controlador se ejecuta con normalidad. Si no, <span class="chip chip-warn">401</span> cuando falta el token o <span class="chip chip-danger">403</span> cuando falta el rol.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="note note-key">
+        <span class="note-label">Por qué esto importa</span>
+        <p>
+          El paso 3 es la razón de usar JWT y no sesiones: <strong>no hay una
+          llamada de red por petición</strong>. La API no depende de que Keycloak
+          esté disponible para atender tráfico, y se pueden correr varias
+          instancias detrás de un balanceador sin compartir sesiones entre ellas.
+        </p>
+      </div>
+
+      <h3 id="dos-urls">La trampa de las dos URLs</h3>
+      <p>
+        En <code>application.yml</code> hay <b>dos</b> direcciones del mismo realm.
+        No es un copiar y pegar mal hecho: es el error más frecuente de montar
+        Keycloak con Docker, y viene de que dentro de la red de contenedores
+        <em>localhost no significa lo mismo para todos</em>.
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Propiedad</th><th>Valor en Docker</th><th>Quién la usa</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>issuer-uri</code></td>
+              <td><code>http://localhost:8081/realms/cowsvsclown</code></td>
+              <td>Nadie la llama. Solo se <b>compara</b> con el claim <code>iss</code> que trae el token</td>
+            </tr>
+            <tr>
+              <td><code>jwk-set-uri</code></td>
+              <td><code>http://keycloak:8080/realms/…/certs</code></td>
+              <td>La <b>llama la app</b> para bajarse las llaves públicas</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        El token lo pedís vos desde el navegador, así que adentro dice
+        <code>localhost:8081</code>. Pero el contenedor de la app no tiene ningún
+        Keycloak en <em>su</em> localhost: para él está en
+        <code>keycloak:8080</code>. Poner las dos iguales rompe de una de estas
+        dos maneras:
+      </p>
+
+      <div class="split">
+        <div class="split-bad">
+          <h4>Las dos internas</h4>
+          <p><code>The iss claim is not valid</code></p>
+          <p>Un <span class="chip chip-warn">401</span> con un token perfectamente bueno. Desconcertante, porque en Keycloak todo se ve bien.</p>
+        </div>
+        <div class="split-bad">
+          <h4>Las dos públicas</h4>
+          <p><code>Connection refused</code></p>
+          <p>La app no puede bajar las llaves y no valida nada. Falla en el primer token, no al arrancar.</p>
+        </div>
+      </div>
+
+      <p>
+        La otra mitad de la solución está del lado de Keycloak:
+        <code>KC_HOSTNAME=http://localhost:8081</code> en el
+        <code>compose.yml</code>. Eso fija la dirección pública, de modo que el
+        claim <code>iss</code> sea siempre el mismo sin importar por dónde se
+        entró. Sin esa línea, Keycloak lo deduce de la cabecera <code>Host</code>
+        de cada petición y dos tokens pedidos desde sitios distintos saldrían con
+        emisores distintos.
+      </p>
+    </section>
+
+    <!-- ===================================================================
+         6. CÓDIGO
+         =================================================================== -->
+    <section id="codigo">
+      <h2>Las piezas de código</h2>
+      <p class="h2-kicker">Lo poco que hubo que escribir</p>
+
+      <p>
+        Casi todo lo hace Spring Boot solo a partir de dos propiedades de
+        configuración. Solo tres cosas necesitaron código propio, y cada una
+        resuelve un problema concreto que sin ella se manifiesta como un error
+        difícil de diagnosticar.
+      </p>
+
+      <h3>La configuración que no es código</h3>
+      <div class="code">
+        <div class="code-head"><span>src/main/resources/application.yml</span><button class="copy" type="button">Copiar</button></div>
+<pre><code><span class="k">spring:</span>
+  <span class="k">security:</span>
+    <span class="k">oauth2:</span>
+      <span class="k">resourceserver:</span>
+        <span class="k">jwt:</span>
+          <span class="c"># Se compara con el claim "iss" del token</span>
+          <span class="k">issuer-uri:</span>  ${keycloak.issuer-uri}
+          <span class="c"># De acá se bajan las llaves públicas</span>
+          <span class="k">jwk-set-uri:</span> ${KEYCLOAK_JWK_SET_URI:...}</code></pre>
+      </div>
+      <p>
+        Con eso Spring Boot construye solo el <code>JwtDecoder</code>: el objeto
+        que abre el token, verifica la firma y decide si es de fiar. No hay que
+        escribir ni una línea de Java para esa parte.
+      </p>
+
+      <h3 id="converter">1 · KeycloakRoleConverter — el que hubo que escribir sí o sí</h3>
+      <p>
+        Spring Security <strong>no sabe leer los roles de Keycloak</strong>. Su
+        conversor de fábrica solo mira el claim <code>scope</code> y produce
+        autoridades del estilo <code>SCOPE_profile</code>. Los roles de Keycloak
+        están en otro sitio y con otra forma: <code>realm_access.roles</code>.
+      </p>
+      <div class="note note-trap">
+        <span class="note-label">El síntoma si falta</span>
+        <p>
+          Un usuario con rol <code>ADMIN</code> llega autenticado pero
+          <em>sin ninguna autoridad</em>, y cualquier regla lo rechaza. Es el
+          clásico <strong>«el token es válido pero siempre me da 403»</strong>,
+          que se busca durante horas porque en Keycloak el rol está ahí, visible.
+        </p>
+      </div>
+      <div class="code">
+        <div class="code-head"><span>common/security/KeycloakRoleConverter.java</span><button class="copy" type="button">Copiar</button></div>
+<pre><code><span class="c">// "ADMIN" (en el token)  ->  ROLE_ADMIN (lo que entiende Spring)</span>
+<span class="c">//</span>
+<span class="c">// El prefijo ROLE_ no es decorativo: hasRole("ADMIN") se traduce</span>
+<span class="c">// internamente a "¿tiene la autoridad ROLE_ADMIN?".</span>
+<span class="k">public</span> Collection&lt;GrantedAuthority&gt; <span class="k">convert</span>(Jwt jwt) {
+    Set&lt;GrantedAuthority&gt; authorities =
+            <span class="k">new</span> LinkedHashSet&lt;&gt;(scopesConverter.convert(jwt));
+
+    realmRoles(jwt).forEach(role  -&gt; authorities.add(toAuthority(role)));
+    clientRoles(jwt).forEach(role -&gt; authorities.add(toAuthority(role)));
+
+    <span class="k">return</span> authorities;
+}</code></pre>
+      </div>
+      <p>
+        Además junta los roles de realm con los del cliente, pasa los nombres a
+        mayúsculas (para que un rol creado como <code>admin</code> funcione igual)
+        y tolera que el claim llegue ausente o con otra forma. Eso último no es
+        paranoia: el token es entrada externa, y si el conversor lanzara una
+        excepción lo haría <em>dentro de un filtro</em>, donde no hay ningún
+        <code>@ExceptionHandler</code> que la convierta en una respuesta decente
+        — todas las peticiones terminarían en <span class="chip chip-danger">500</span>.
+      </p>
+
+      <h3>2 · Los manejadores de 401 y 403</h3>
+      <p>
+        Los rechazos de seguridad ocurren en la cadena de filtros, <em>antes</em>
+        de que la petición llegue al <code>DispatcherServlet</code>. Por eso el
+        <code>GlobalExceptionHandler</code> ni se entera, y sin estas dos clases
+        los <span class="chip chip-warn">401</span> y
+        <span class="chip chip-danger">403</span> saldrían con la página de error
+        por defecto de Spring: otra forma de JSON, distinta a la del resto de la API.
+      </p>
+      <p>
+        La solución no es escribir el JSON a mano, sino <b>reinyectar</b> la
+        excepción en el mismo mecanismo que usa todo lo demás, para que el cuerpo
+        lo arme un único sitio:
+      </p>
+      <div class="code">
+        <div class="code-head"><span>Respuesta de un 401</span></div>
+<pre><code>{
+  <span class="k">"status"</span>: 401,
+  <span class="k">"error"</span>: <span class="s">"Unauthorized"</span>,
+  <span class="k">"message"</span>: <span class="s">"A valid access token is required to use this endpoint"</span>,
+  <span class="k">"path"</span>: <span class="s">"/api/owners"</span>,
+  <span class="k">"timestamp"</span>: <span class="s">"2026-08-07T20:27:19.501"</span>
+}</code></pre>
+      </div>
+      <p>
+        Exactamente la misma estructura que un <code>404</code> o un
+        <code>409</code>. El mensaje es deliberadamente vago: distinguir si el
+        token venció, si está mal firmado o si es de otro emisor solo le sirve a
+        quien está tanteando la API. El motivo real queda en el log.
+      </p>
+
+      <h3>3 · SecurityConfig — las reglas</h3>
+      <p>
+        Un único archivo con toda la política. Se evalúan <b>en orden</b> y gana la
+        primera que coincide, por eso lo específico va antes que lo genérico:
+      </p>
+      <div class="code">
+        <div class="code-head"><span>common/config/SecurityConfig.java</span><button class="copy" type="button">Copiar</button></div>
+<pre><code>.authorizeHttpRequests(auth -&gt; auth
+    <span class="c">// Documentación y salud: abiertos</span>
+    .requestMatchers(RUTAS_PUBLICAS_DOCUMENTACION).permitAll()
+    .requestMatchers(RUTAS_PUBLICAS_INFRAESTRUCTURA).permitAll()
+
+    <span class="c">// Consultar es público</span>
+    .requestMatchers(HttpMethod.GET, <span class="s">"/api/**"</span>).permitAll()
+
+    <span class="c">// El vínculo payaso-vaca, ANTES que la regla general de DELETE</span>
+    .requestMatchers(HttpMethod.DELETE, <span class="s">"/api/clowns/*/cows/*"</span>)
+        .hasAnyRole(ROL_USUARIO, ROL_ADMIN)
+
+    <span class="c">// Crear y modificar</span>
+    .requestMatchers(HttpMethod.POST,  <span class="s">"/api/**"</span>).hasAnyRole(ROL_USUARIO, ROL_ADMIN)
+    .requestMatchers(HttpMethod.PATCH, <span class="s">"/api/**"</span>).hasAnyRole(ROL_USUARIO, ROL_ADMIN)
+
+    <span class="c">// Dar de baja un registro: solo ADMIN</span>
+    .requestMatchers(HttpMethod.DELETE, <span class="s">"/api/**"</span>).hasRole(ROL_ADMIN)
+
+    <span class="c">// Cerrado por defecto: un endpoint nuevo nace protegido</span>
+    .anyRequest().authenticated())</code></pre>
+      </div>
+
+      <h4>Dos decisiones que conviene justificar</h4>
+      <p>
+        <b>Sin estado.</b> <code>SessionCreationPolicy.STATELESS</code>: no se crea
+        <code>HttpSession</code> ni se guarda nada del usuario entre peticiones.
+        Cada una se autentica sola con su token.
+      </p>
+      <p>
+        <b>CSRF desactivado, y no es un atajo.</b> El ataque CSRF consiste en que
+        otro sitio consiga que <em>tu navegador</em> mande una petición
+        aprovechando una cookie de sesión que viaja sola. Acá no hay cookies ni
+        sesión: la credencial es una cabecera que el cliente pone a mano y que
+        ningún sitio ajeno puede leer ni hacer que se envíe. Sin ese vector, la
+        protección no aporta nada y solo rompería los <code>POST</code>.
+      </p>
+    </section>
+
+    <!-- ===================================================================
+         7. PERMISOS
+         =================================================================== -->
+    <section id="permisos">
+      <h2>La tabla de permisos</h2>
+      <p class="h2-kicker">Quién puede llamar a qué</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr><th>Método</th><th>Ruta</th><th>Rol necesario</th><th>Por qué</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/api/**</code></td>
+              <td><span class="chip chip-mute">ninguno</span></td>
+              <td>Consultar es público: lo que se pidió proteger son las operaciones que <b>modifican</b></td>
+            </tr>
+            <tr>
+              <td><code>POST</code></td>
+              <td><code>/api/**</code></td>
+              <td><b>USER</b> o <b>ADMIN</b></td>
+              <td>Crear un registro</td>
+            </tr>
+            <tr>
+              <td><code>PATCH</code> <code>PUT</code></td>
+              <td><code>/api/**</code></td>
+              <td><b>USER</b> o <b>ADMIN</b></td>
+              <td>Modificar un registro existente</td>
+            </tr>
+            <tr>
+              <td><code>POST</code> <code>DELETE</code></td>
+              <td><code>/api/clowns/{id}/cows/{cowId}</code></td>
+              <td><b>USER</b> o <b>ADMIN</b></td>
+              <td>Solo asigna o quita un <b>vínculo</b> de la tabla intermedia. Se deshace volviendo a asignar</td>
+            </tr>
+            <tr>
+              <td><code>DELETE</code></td>
+              <td><code>/api/**</code> <span style="color:var(--ink-3)">(el resto)</span></td>
+              <td><b>ADMIN</b></td>
+              <td>Da de baja el <b>registro entero</b>. Es más grave, así que pide más</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/swagger-ui/**</code> · <code>/v3/api-docs/**</code></td>
+              <td><span class="chip chip-mute">ninguno</span></td>
+              <td>La documentación tiene que ser accesible antes de saber cómo autenticarse</td>
+            </tr>
+            <tr>
+              <td><code>GET</code></td>
+              <td><code>/actuator/health</code></td>
+              <td><span class="chip chip-mute">ninguno</span></td>
+              <td>Si pidiera token, Docker marcaría el contenedor como caído y lo reiniciaría en bucle</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Los dos <code>DELETE</code> están separados porque <b>no son la misma
+        operación</b>. Quitarle una vaca a un payaso rompe un vínculo y se
+        deshace en un segundo; borrar una vaca da de baja el registro. Tratarlos
+        igual sería o bien pedir demasiado para lo primero, o bien pedir muy poco
+        para lo segundo.
+      </p>
+
+      <h3>Los tres usuarios de prueba</h3>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Usuario</th><th>Contraseña</th><th>Roles</th><th>Sirve para probar</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>admin</code></td>
+              <td><code>admin123</code></td>
+              <td>ADMIN + USER</td>
+              <td>Que todo funcione</td>
+            </tr>
+            <tr>
+              <td><code>user</code></td>
+              <td><code>user123</code></td>
+              <td>USER</td>
+              <td>Que un <code>DELETE</code> dé <span class="chip chip-danger">403</span></td>
+            </tr>
+            <tr>
+              <td><code>curioso</code></td>
+              <td><code>curioso123</code></td>
+              <td><span style="color:var(--ink-3)">ninguno</span></td>
+              <td>Que hasta un <code>POST</code> dé <span class="chip chip-danger">403</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note note-key">
+        <span class="note-label">401 no es 403</span>
+        <p>
+          <code>curioso</code> existe para dejar clara la diferencia. Su token es
+          perfectamente válido, así que <strong>no</strong> da 401.
+        </p>
+        <p>
+          <span class="chip chip-warn">401</span> <b>Unauthorized</b> — «no sé
+          quién sos». Falta el token, o está vencido, mal firmado o es de otro realm.
+        </p>
+        <p>
+          <span class="chip chip-danger">403</span> <b>Forbidden</b> — «sé quién
+          sos y no podés». El token es válido pero al usuario le falta el rol.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         8. PROBARLO
+         =================================================================== -->
+    <section id="probarlo">
+      <h2>Cómo probarlo</h2>
+      <p class="h2-kicker">De cero a un 403 provocado</p>
+
+      <div class="flow">
+
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Levantar todo</h4>
+            <p>Tres contenedores: la API, Keycloak y Postgres.</p>
+            <div class="code">
+              <div class="code-head"><span>bash</span><button class="copy" type="button">Copiar</button></div>
+<pre><code><span class="k">cp</span> .env.template .env
+<span class="k">docker compose up</span> -d</code></pre>
+            </div>
+            <p>
+              La primera vez Keycloak tarda entre 20 y 40 segundos, porque además
+              de arrancar tiene que importar el realm. La app <em>no</em> lo
+              espera: arranca igual y ya responde los <code>GET</code>.
+            </p>
+            <div class="code">
+              <div class="code-head"><span>bash — ver cuándo está listo</span><button class="copy" type="button">Copiar</button></div>
+<pre><code><span class="k">docker compose logs</span> -f keycloak
+<span class="c"># termina con: Realm 'cowsvsclown' imported</span></code></pre>
+            </div>
+            <div class="note">
+              <span class="note-label">Requisito</span>
+              <p>El puerto <b>8080</b> tiene que estar libre. Si otro contenedor lo ocupa, la app falla con <code>port is already allocated</code>. Se comprueba con <code>lsof -nP -iTCP:8080 -sTCP:LISTEN</code>.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Comprobar que lo público sigue público</h4>
+            <p>Sin ningún token, esto tiene que responder <span class="chip chip-ok">200</span>:</p>
+            <div class="code">
+              <div class="code-head"><span>bash</span><button class="copy" type="button">Copiar</button></div>
+<pre><code><span class="k">curl</span> -i http://localhost:8080/api/owners
+<span class="k">curl</span> -i http://localhost:8080/actuator/health</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Comprobar que lo protegido está protegido</h4>
+            <p>El mismo <code>POST</code> sin token tiene que dar <span class="chip chip-warn">401</span>:</p>
+            <div class="code">
+              <div class="code-head"><span>bash</span><button class="copy" type="button">Copiar</button></div>
+<pre><code><span class="k">curl</span> -i -X POST http://localhost:8080/api/owners \
+  -H <span class="s">'Content-Type: application/json'</span> \
+  -d <span class="s">'{"firstName":"Ada","lastName":"Lovelace"}'</span></code></pre>
+            </div>
+            <p>Fijate en la cabecera de la respuesta, no solo en el código:</p>
+            <div class="code">
+              <div class="code-head"><span>respuesta</span></div>
+<pre><code>HTTP/1.1 401
+<span class="hl">WWW-Authenticate: Bearer realm="cowsvsclown"</span>
+
+{"status":401,"error":"Unauthorized","message":"A valid access
+ token is required to use this endpoint","path":"/api/owners",
+ "timestamp":"2026-08-07T20:27:19.501"}</code></pre>
+            </div>
+            <p>
+              Esa cabecera la exige el RFC&nbsp;6750: no solo dice que falló, dice
+              <em>cómo</em> tendría que haberse autenticado el cliente.
+            </p>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Pedir un token</h4>
+            <p>Directo al endpoint de Keycloak, sin navegador:</p>
+            <div class="code">
+              <div class="code-head"><span>bash</span><button class="copy" type="button">Copiar</button></div>
+<pre><code>TOKEN=$(<span class="k">curl</span> -s -X POST \
+  <span class="s">"http://localhost:8081/realms/cowsvsclown/protocol/openid-connect/token"</span> \
+  -d <span class="s">"client_id=cowsvsclown-api"</span> \
+  -d <span class="s">"username=admin"</span> \
+  -d <span class="s">"password=admin123"</span> \
+  -d <span class="s">"grant_type=password"</span> | jq -r .access_token)
+
+<span class="k">echo</span> ${TOKEN:0:40}...</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Mirar qué trae adentro</h4>
+            <p>El segundo bloque del token es el contenido. Se lee sin ninguna llave:</p>
+            <div class="code">
+              <div class="code-head"><span>bash</span><button class="copy" type="button">Copiar</button></div>
+<pre><code><span class="k">echo</span> $TOKEN | <span class="k">cut</span> -d. -f2 | <span class="k">base64</span> -d 2&gt;/dev/null | jq</code></pre>
+            </div>
+            <p>
+              Tienen que aparecer <code>iss</code> apuntando a
+              <code>localhost:8081</code>, <code>preferred_username: "admin"</code>
+              y <code>realm_access.roles: ["ADMIN", "USER"]</code>. También se
+              puede pegar el token en <a href="https://jwt.io" rel="noopener">jwt.io</a>.
+            </p>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Usarlo</h4>
+            <p>Ahora sí, <span class="chip chip-ok">201</span>:</p>
+            <div class="code">
+              <div class="code-head"><span>bash</span><button class="copy" type="button">Copiar</button></div>
+<pre><code><span class="k">curl</span> -i -X POST http://localhost:8080/api/owners \
+  -H <span class="s">"Authorization: Bearer $TOKEN"</span> \
+  -H <span class="s">'Content-Type: application/json'</span> \
+  -d <span class="s">'{"firstName":"Ada","lastName":"Lovelace"}'</span></code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Provocar un 403</h4>
+            <p>
+              Lo más instructivo de todo: pedir un token de <code>user</code>, que
+              es válido pero no tiene <code>ADMIN</code>, e intentar un borrado.
+            </p>
+            <div class="code">
+              <div class="code-head"><span>bash</span><button class="copy" type="button">Copiar</button></div>
+<pre><code>USER_TOKEN=$(<span class="k">curl</span> -s -X POST \
+  <span class="s">"http://localhost:8081/realms/cowsvsclown/protocol/openid-connect/token"</span> \
+  -d <span class="s">"client_id=cowsvsclown-api"</span> -d <span class="s">"username=user"</span> \
+  -d <span class="s">"password=user123"</span> -d <span class="s">"grant_type=password"</span> | jq -r .access_token)
+
+<span class="c"># Crear: funciona (201)</span>
+<span class="k">curl</span> -s -o /dev/null -w <span class="s">"%{http_code}\n"</span> -X POST http://localhost:8080/api/owners \
+  -H <span class="s">"Authorization: Bearer $USER_TOKEN"</span> -H <span class="s">'Content-Type: application/json'</span> \
+  -d <span class="s">'{"firstName":"Grace","lastName":"Hopper"}'</span>
+
+<span class="c"># Borrar: 403, porque DELETE pide ADMIN</span>
+<span class="k">curl</span> -s -X DELETE http://localhost:8080/api/owners/1 \
+  -H <span class="s">"Authorization: Bearer $USER_TOKEN"</span> | jq</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="flow-step">
+          <div class="flow-body">
+            <h4>Probarlo desde Swagger</h4>
+            <p>
+              Lo mismo, pero por navegador y con el flujo bueno
+              (Authorization&nbsp;Code&nbsp;+&nbsp;PKCE), que es el que nunca le
+              muestra tu contraseña a la aplicación.
+            </p>
+            <p>
+              Abrí <a href="http://localhost:8080/swagger-ui.html" rel="noopener">localhost:8080/swagger-ui.html</a>,
+              tocá el botón <b>Authorize</b> 🔓, entrá con
+              <code>admin</code>&nbsp;/&nbsp;<code>admin123</code>. A partir de ahí
+              Swagger adjunta el token en cada petición y podés probar los
+              endpoints desde la propia página.
+            </p>
+          </div>
+        </div>
+
+      </div>
+
+      <h3>Tabla de escenarios</h3>
+      <p>Todos estos fueron verificados contra el stack levantado:</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Petición</th><th>Con qué token</th><th>Respuesta</th></tr></thead>
+          <tbody>
+            <tr><td><code>GET /api/owners</code></td><td><span style="color:var(--ink-3)">sin token</span></td><td><span class="chip chip-ok">200</span></td></tr>
+            <tr><td><code>GET /actuator/health</code></td><td><span style="color:var(--ink-3)">sin token</span></td><td><span class="chip chip-ok">200</span></td></tr>
+            <tr><td><code>GET /v3/api-docs</code></td><td><span style="color:var(--ink-3)">sin token</span></td><td><span class="chip chip-ok">200</span></td></tr>
+            <tr><td><code>POST /api/owners</code></td><td><span style="color:var(--ink-3)">sin token</span></td><td><span class="chip chip-warn">401</span></td></tr>
+            <tr><td><code>POST /api/owners</code></td><td>token inventado</td><td><span class="chip chip-warn">401</span></td></tr>
+            <tr><td><code>POST /api/owners</code></td><td><code>curioso</code></td><td><span class="chip chip-danger">403</span></td></tr>
+            <tr><td><code>POST /api/owners</code></td><td><code>user</code></td><td><span class="chip chip-ok">201</span></td></tr>
+            <tr><td><code>DELETE /api/owners/1</code></td><td><code>user</code></td><td><span class="chip chip-danger">403</span></td></tr>
+            <tr><td><code>POST /api/owners</code></td><td><code>admin</code></td><td><span class="chip chip-ok">201</span></td></tr>
+            <tr><td><code>DELETE /api/owners/1</code></td><td><code>admin</code></td><td><span class="chip chip-ok">204</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>La consola de Keycloak</h3>
+      <p>
+        En <a href="http://localhost:8081" rel="noopener">localhost:8081</a>, con
+        <code>admin</code>&nbsp;/&nbsp;<code>admin</code>. Vale la pena entrar a
+        ver, en el realm <code>cowsvsclown</code>:
+      </p>
+      <ul>
+        <li><b>Realm roles</b> — <code>ADMIN</code> y <code>USER</code>, y cómo el primero <em>contiene</em> al segundo (pestaña <i>Associated roles</i>).</li>
+        <li><b>Clients → cowsvsclown-api</b> — los flujos habilitados, las <i>redirect URIs</i> y el mapper de audiencia.</li>
+        <li><b>Users → admin → Role mapping</b> — de dónde salen los roles que después aparecen en el token.</li>
+        <li><b>Sessions</b> — las sesiones abiertas, y el botón para cerrarlas. Esto es lo que tendrías que haber construido a mano.</li>
+      </ul>
+      <div class="note note-trap">
+        <span class="note-label">Ojo con la consola</span>
+        <p>
+          Lo que cambies por la interfaz <strong>no se guarda en el repositorio</strong>:
+          vive en una base H2 que está <em>dentro del contenedor</em>, no en un
+          volumen. En el siguiente <code>docker compose down</code> se pierde.
+        </p>
+        <p>
+          Para que un cambio sobreviva tiene que estar en
+          <code>keycloak/realm-cowsvsclown.json</code>. Se edita el archivo y se
+          hace <code>down</code> y <code>up</code>: no hace falta <code>-v</code>,
+          y así los datos de Postgres se conservan.
+        </p>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         9. FALLOS
+         =================================================================== -->
+    <section id="fallos">
+      <h2>Cuando algo falla</h2>
+      <p class="h2-kicker">Los errores que vas a ver</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Síntoma</th><th>Causa probable</th><th>Qué hacer</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><span class="chip chip-warn">401</span> con un token recién pedido</td>
+              <td>El claim <code>iss</code> no coincide con <code>issuer-uri</code></td>
+              <td>Comprobar que <code>KEYCLOAK_PORT</code> del <code>.env</code> sea el mismo con el que pediste el token</td>
+            </tr>
+            <tr>
+              <td><span class="chip chip-warn">401</span> en todo, sin haber tocado nada</td>
+              <td>El token venció: dura 5 minutos</td>
+              <td>Pedir otro. Es lo más frecuente de todo</td>
+            </tr>
+            <tr>
+              <td><span class="chip chip-danger">403</span> con un token que sí tiene el rol</td>
+              <td>Los roles no se están leyendo del token</td>
+              <td>Es el caso que resuelve <code>KeycloakRoleConverter</code>. Verificar que el rol esté en <code>realm_access.roles</code> decodificando el token</td>
+            </tr>
+            <tr>
+              <td><code>Connection refused</code> en los logs de la app</td>
+              <td><code>jwk-set-uri</code> apunta a <code>localhost</code> desde dentro del contenedor</td>
+              <td>Tiene que ser <code>http://keycloak:8080/…</code></td>
+            </tr>
+            <tr>
+              <td>Los cambios del JSON no se aplican</td>
+              <td>El contenedor no se recreó (<code>restart</code> en vez de <code>down</code>)</td>
+              <td><code>docker compose down &amp;&amp; docker compose up -d</code></td>
+            </tr>
+            <tr>
+              <td><code>Missing parameter: code_challenge</code></td>
+              <td>El cliente exige PKCE y Swagger no lo manda</td>
+              <td><code>use-pkce-with-authorization-code-grant: true</code> en <code>application.yml</code></td>
+            </tr>
+            <tr>
+              <td>No se puede entrar a la consola</td>
+              <td>Variables viejas <code>KEYCLOAK_ADMIN</code></td>
+              <td>Desde la v26 son <code>KC_BOOTSTRAP_ADMIN_USERNAME</code> y <code>KC_BOOTSTRAP_ADMIN_PASSWORD</code></td>
+            </tr>
+            <tr>
+              <td><code>port is already allocated</code></td>
+              <td>Otro proceso ocupa el 8080 o el 8081</td>
+              <td><code>lsof -nP -iTCP:8080 -sTCP:LISTEN</code>, y liberarlo o cambiar el puerto en el <code>.env</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h4>Comandos útiles para diagnosticar</h4>
+      <div class="code">
+        <div class="code-head"><span>bash</span><button class="copy" type="button">Copiar</button></div>
+<pre><code><span class="c"># ¿Qué URLs cree Keycloak que tiene? (acá se ve el "issuer" real)</span>
+<span class="k">curl</span> -s http://localhost:8081/realms/cowsvsclown/.well-known/openid-configuration | jq
+
+<span class="c"># ¿Las llaves públicas son alcanzables DESDE la app?</span>
+<span class="k">docker compose exec</span> app \
+  curl -s http://keycloak:8080/realms/cowsvsclown/protocol/openid-connect/certs
+
+<span class="c"># ¿Qué dice la app cuando rechaza?</span>
+<span class="k">docker compose logs</span> -f app | grep -E <span class="s">"401|403"</span></code></pre>
+      </div>
+    </section>
+
+    <!-- ===================================================================
+         10. TESTS
+         =================================================================== -->
+    <section id="tests">
+      <h2>Cómo se testea sin Keycloak</h2>
+      <p class="h2-kicker">45 pruebas que no necesitan un contenedor</p>
+
+      <p>
+        Las pruebas no pueden levantar Keycloak: sería lento y la integración
+        continua no tiene forma de arrancar un contenedor extra. Pero tampoco
+        tiene sentido apagar la seguridad y decir que está probada.
+      </p>
+      <p>
+        La solución es reemplazar <b>solo la pieza más chica posible</b>: el
+        <code>JwtDecoder</code>, que es el objeto que verifica la firma. Todo lo
+        que viene después sigue siendo real — la cadena de filtros, la conversión
+        de roles, las reglas, los 401 y los 403. Lo único que se da por bueno es
+        la criptografía, que es responsabilidad de Spring Security y no de este
+        proyecto.
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Archivo</th><th class="t-num">Tests</th><th>Qué prueba</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>KeycloakRoleConverterTest</code></td>
+              <td class="t-num">13</td>
+              <td>Que los roles del token se traduzcan bien, incluso cuando el claim llega ausente, vacío o con otra forma</td>
+            </tr>
+            <tr>
+              <td><code>SecurityConfigIntegrationTest</code></td>
+              <td class="t-num">18</td>
+              <td>Las reglas: quién puede llamar a qué, con la cadena de filtros real</td>
+            </tr>
+            <tr>
+              <td><code>SecurityE2ETest</code></td>
+              <td class="t-num">14</td>
+              <td>Lo mismo por HTTP real: cabeceras, cuerpo del error, y que un rechazo <b>no escriba en la base</b></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>
+        Esa última comprobación es la que de verdad importa: no basta con que la
+        respuesta diga <span class="chip chip-warn">401</span>, hay que verificar
+        que el registro <em>no llegó a crearse</em>. Si no, el bloqueo sería
+        cosmético.
+      </p>
+
+      <div class="code">
+        <div class="code-head"><span>bash</span><button class="copy" type="button">Copiar</button></div>
+<pre><code><span class="k">./gradlew</span> test                <span class="c"># las 241, con reportes</span>
+<span class="k">./gradlew</span> pruebasE2E         <span class="c"># solo las end to end (44)</span>
+<span class="k">./gradlew</span> build               <span class="c"># + el gate de cobertura</span></code></pre>
+      </div>
+
+      <p>
+        Los reportes generados están publicados acá mismo:
+        <a href="docs/reportes/pruebas/index.html">pruebas</a> y
+        <a href="docs/reportes/cobertura/index.html">cobertura</a>.
+      </p>
+    </section>
+
+    <!-- ===================================================================
+         11. PRODUCCIÓN
+         =================================================================== -->
+    <section id="produccion">
+      <h2>Qué falta para producción</h2>
+      <p class="h2-kicker">Lo que está así porque es un proyecto de clase</p>
+
+      <p>
+        Esta configuración está pensada para levantarse con un comando y poder
+        probarla. Varias cosas están deliberadamente relajadas y no deberían salir
+        así a un entorno real:
+      </p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Ahora</th><th>En producción</th><th>Por qué</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>start-dev</code></td>
+              <td><code>start</code> con Postgres propio</td>
+              <td>En modo desarrollo Keycloak usa una base H2 dentro del contenedor: todo se pierde al recrearlo</td>
+            </tr>
+            <tr>
+              <td>HTTP</td>
+              <td>HTTPS obligatorio<br><code>sslRequired: external</code></td>
+              <td>El token viaja en claro. Quien lo intercepte puede usarlo hasta que venza</td>
+            </tr>
+            <tr>
+              <td><code>admin</code>/<code>admin</code></td>
+              <td>Credenciales fuertes, fuera del repositorio</td>
+              <td>Es el administrador de todo el servidor de identidad</td>
+            </tr>
+            <tr>
+              <td>Password grant activo</td>
+              <td>Desactivarlo</td>
+              <td>Obliga a que el cliente vea la contraseña del usuario. OAuth&nbsp;2.1 lo elimina</td>
+            </tr>
+            <tr>
+              <td>Usuarios en el JSON</td>
+              <td>Alta real o federación con LDAP&nbsp;/&nbsp;AD</td>
+              <td>Contraseñas versionadas en git son contraseñas públicas</td>
+            </tr>
+            <tr>
+              <td>Sin validar audiencia</td>
+              <td>Descomentar <code>audiences</code></td>
+              <td>Hace que un token emitido para otra aplicación del mismo realm no valga acá. El mapper ya está puesto</td>
+            </tr>
+            <tr>
+              <td>Sin MFA</td>
+              <td>OTP obligatorio para <code>ADMIN</code></td>
+              <td>Keycloak ya lo trae: es activarlo en el realm, no programarlo</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note note-key">
+        <span class="note-label">Lo que hay que llevarse</span>
+        <p>
+          Fijate que <b>todas</b> las filas de la derecha son cambios de
+          configuración, no de código. Esa es, en una frase, la razón de haber
+          delegado la autenticación: endurecer el sistema es tocar un archivo,
+          no reescribir y reauditar una implementación propia.
+        </p>
+      </div>
+    </section>
+
+    <footer class="colophon">
+      <p>
+        <b>Cows vs Clowns API</b> · Implementación 2026-2 · Sebastián Zapata
+      </p>
+      <p>
+        Documentación complementaria en el repositorio:
+        <code>README.md</code> (puesta en marcha y endpoints) y
+        <code>keycloak/README.md</code> (el realm, bloque por bloque).
+        Todos los comandos y respuestas de esta página fueron ejecutados contra
+        el stack real, no transcritos de la documentación oficial.
+      </p>
+    </footer>
+
+  </main>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------- Tema: escribe data-theme, igual que hace el visor ---------- */
+  var root = document.documentElement;
+  var toggle = document.getElementById("theme-toggle");
+
+  toggle.addEventListener("click", function () {
+    var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var current = root.getAttribute("data-theme") || (prefersDark ? "dark" : "light");
+    root.setAttribute("data-theme", current === "dark" ? "light" : "dark");
+  });
+
+  /* ---------- Copiar bloques de código ---------- */
+  document.querySelectorAll(".copy").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var block = button.closest(".code").querySelector("pre");
+      if (!block) return;
+
+      navigator.clipboard.writeText(block.innerText).then(function () {
+        var previous = button.textContent;
+        button.textContent = "Copiado";
+        button.dataset.done = "1";
+        setTimeout(function () {
+          button.textContent = previous;
+          delete button.dataset.done;
+        }, 1400);
+      }).catch(function () {
+        button.textContent = "Error";
+        setTimeout(function () { button.textContent = "Copiar"; }, 1400);
+      });
+    });
+  });
+
+  /* ---------- Marcar en el índice la sección visible ---------- */
+  var links = {};
+  document.querySelectorAll(".rail nav a").forEach(function (link) {
+    links[link.getAttribute("href").slice(1)] = link;
+  });
+
+  var sections = Object.keys(links)
+    .map(function (id) { return document.getElementById(id); })
+    .filter(Boolean);
+
+  if (sections.length && "IntersectionObserver" in window) {
+    var visible = new Set();
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) visible.add(entry.target.id);
+        else visible.delete(entry.target.id);
+      });
+
+      // La primera sección visible en orden de documento es la "actual".
+      var currentId = sections
+        .map(function (section) { return section.id; })
+        .find(function (id) { return visible.has(id); });
+
+      Object.keys(links).forEach(function (id) {
+        if (id === currentId) links[id].setAttribute("aria-current", "true");
+        else links[id].removeAttribute("aria-current");
+      });
+    }, { rootMargin: "-10% 0px -70% 0px", threshold: 0 });
+
+    sections.forEach(function (section) { observer.observe(section); });
+  }
+})();
+</script>
+</body>
+</html>

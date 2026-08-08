@@ -82,10 +82,38 @@ services:
         # No arranca la app hasta que el healthcheck de Postgres pase. Sin esto,
         # la app arrancaría contra una base que todavía no acepta conexiones.
         condition: service_healthy
+      keycloak:
+        # Acá alcanza con service_started (no service_healthy) porque la app NO
+        # necesita a Keycloak para arrancar: las llaves públicas del realm se
+        # descargan la primera vez que llega un token, no al iniciar. Si Keycloak
+        # todavía está importando el realm, la app ya está arriba y respondiendo
+        # los GET públicos; lo único que falla es pedir un token, y para eso hay
+        # que esperar unos 20-30 segundos la primera vez.
+        condition: service_started
 
     environment:
       # Activa el perfil "docker" -> carga application.yml + application-docker.yml
       - SPRING_PROFILES_ACTIVE=docker
+
+      # --------------------------- Keycloak ----------------------------------
+      # Las DOS direcciones del mismo realm. No es un error de copiar y pegar:
+      #
+      #   ISSUER  = la URL PÚBLICA. Es la que aparece dentro del token, en el
+      #             claim "iss", porque es la que usó el navegador para pedirlo.
+      #             La app solo la usa para COMPARAR, nunca la llama.
+      #
+      #   JWK_SET = la URL INTERNA. Es la que la app SÍ llama, para bajarse las
+      #             llaves públicas con las que verifica la firma. Tiene que ser
+      #             "keycloak:8080" (nombre del servicio + puerto del contenedor)
+      #             porque dentro de la red de Docker "localhost" es el propio
+      #             contenedor de la app, donde no hay ningún Keycloak.
+      #
+      # Poner las dos iguales es el error más frecuente de este montaje:
+      #   ambas internas -> "The iss claim is not valid" (401 con un token bueno)
+      #   ambas públicas -> "Connection refused" al bajar las llaves
+      - KEYCLOAK_ISSUER_URI=http://localhost:${KEYCLOAK_PORT}/realms/${KEYCLOAK_REALM}
+      - KEYCLOAK_JWK_SET_URI=http://keycloak:8080/realms/${KEYCLOAK_REALM}/protocol/openid-connect/certs
+      - KEYCLOAK_CLIENT_ID=${KEYCLOAK_CLIENT_ID}
       # OJO: acá va SIEMPRE el puerto 5432, no ${DB_PORT}.
       # Dentro de la red de Docker los contenedores se hablan por el puerto
       # INTERNO de Postgres, que es 5432. ${DB_PORT} es solo el puerto del HOST
@@ -127,6 +155,76 @@ services:
       # Le da 30 segundos de gracia al primer arranque (cuando Postgres crea la
       # base) sin contar esos intentos como fallidos.
       start_period: 30s
+
+  # ===========================================================================
+  # KEYCLOAK — el servidor de identidad
+  # ===========================================================================
+  # Es quien tiene los usuarios, las contraseñas y los roles. La API NO guarda
+  # nada de eso: solo recibe el token que Keycloak emite y lo verifica.
+  #
+  # Dónde entrar una vez levantado:
+  #   Consola de administración : http://localhost:8081        (admin / admin)
+  #   El realm del proyecto     : http://localhost:8081/realms/cowsvsclown
+  #   Config pública del realm  : .../realms/cowsvsclown/.well-known/openid-configuration
+  #
+  # La primera vez tarda entre 20 y 40 segundos: además de arrancar tiene que
+  # importar el realm. Se ve en los logs con:
+  #   docker compose logs -f keycloak
+  # y termina con una línea "Imported realm cowsvsclown from file".
+  # ---------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7
+    container_name: cowsvsclown-keycloak
+    restart: unless-stopped
+
+    # start-dev  -> modo desarrollo: HTTP sin certificados, base de datos H2 en
+    #               memoria y sin las validaciones de hostname de producción.
+    #               Para producción sería "start" con Postgres y HTTPS.
+    #
+    # --import-realm -> al arrancar, importa TODOS los .json que encuentre en
+    #               /opt/keycloak/data/import. Esto es lo que hace que el realm,
+    #               el cliente, los roles y los usuarios de prueba existan sin
+    #               que nadie los cree a mano por la consola web. Si alguien
+    #               cambia algo por la interfaz, ese cambio NO se guarda en el
+    #               .json: vive solo en la base H2 del contenedor.
+    command: ["start-dev", "--import-realm"]
+
+    ports:
+      # 8081 en tu máquina porque el 8080 ya lo ocupa la API. Adentro Keycloak
+      # sigue escuchando en el 8080, que es su puerto por defecto.
+      - "${KEYCLOAK_PORT}:8080"
+
+    environment:
+      # Usuario administrador de Keycloak (el del realm "master", que manda
+      # sobre todos los realms). OJO: son las variables KC_BOOTSTRAP_ADMIN_*,
+      # que reemplazaron a KEYCLOAK_ADMIN / KEYCLOAK_ADMIN_PASSWORD en la
+      # versión 26. Con los nombres viejos el contenedor arranca sin admin y no
+      # se puede entrar a la consola.
+      - KC_BOOTSTRAP_ADMIN_USERNAME=${KEYCLOAK_ADMIN_USER}
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
+
+      # Fija la dirección pública de Keycloak. Es LA pieza que hace que el claim
+      # "iss" de los tokens sea siempre "http://localhost:8081/realms/..." sin
+      # importar por dónde se haya entrado. Sin esta línea, Keycloak la deduce
+      # de la cabecera Host de cada petición: un token pedido desde el navegador
+      # y otro pedido desde otro contenedor saldrían con emisores distintos, y
+      # uno de los dos sería rechazado por la API.
+      - KC_HOSTNAME=http://localhost:${KEYCLOAK_PORT}
+
+      # Permite entrar por HTTP. En desarrollo es lo práctico; en producción esto
+      # va en false y todo pasa por HTTPS, porque un token viaja en claro y quien
+      # lo intercepte puede usarlo hasta que venza.
+      - KC_HTTP_ENABLED=true
+
+      # No exigir que el hostname de la petición coincida con KC_HOSTNAME. Es lo
+      # que permite que la API llame a "http://keycloak:8080/..." para bajar las
+      # llaves mientras el navegador entra por "http://localhost:8081/...".
+      - KC_HOSTNAME_STRICT=false
+
+    volumes:
+      # Solo lectura (:ro): el contenedor lee el realm al arrancar y no tiene
+      # por qué poder modificar un archivo del repositorio.
+      - ./keycloak:/opt/keycloak/data/import:ro
 
 volumes:
   postgres_data:

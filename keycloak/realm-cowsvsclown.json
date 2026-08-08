@@ -1,0 +1,149 @@
+{
+  "realm": "cowsvsclown",
+  "displayName": "Cows vs Clowns",
+  "displayNameHtml": "<b>Cows vs Clowns</b>",
+  "enabled": true,
+
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "rememberMe": true,
+
+  "bruteForceProtected": true,
+  "failureFactor": 10,
+  "waitIncrementSeconds": 60,
+
+  "accessTokenLifespan": 300,
+  "accessTokenLifespanForImplicitFlow": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "USER",
+        "description": "Puede crear y modificar vacas, payasos y duenos. No puede darlos de baja.",
+        "composite": false
+      },
+      {
+        "name": "ADMIN",
+        "description": "Todo lo de USER mas la baja logica de registros (DELETE).",
+        "composite": true,
+        "composites": {
+          "realm": ["USER"]
+        }
+      }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "cowsvsclown-api",
+      "name": "Cows vs Clowns API",
+      "description": "Cliente publico usado por Swagger UI y por las pruebas con curl.",
+      "enabled": true,
+      "protocol": "openid-connect",
+
+      "publicClient": true,
+      "bearerOnly": false,
+
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+
+      "fullScopeAllowed": true,
+      "frontchannelLogout": true,
+
+      "redirectUris": [
+        "http://localhost:8080/*",
+        "http://127.0.0.1:8080/*",
+        "http://localhost:8081/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://127.0.0.1:8080"
+      ],
+
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8080/*",
+        "access.token.lifespan": "300"
+      },
+
+      "protocolMappers": [
+        {
+          "name": "audience-cowsvsclown-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "cowsvsclown-api",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Ana",
+      "lastName": "Administradora",
+      "email": "admin@cowsvsclown.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "requiredActions": [],
+      "realmRoles": ["ADMIN", "USER"]
+    },
+    {
+      "username": "user",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Uriel",
+      "lastName": "Usuario",
+      "email": "user@cowsvsclown.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "user123",
+          "temporary": false
+        }
+      ],
+      "requiredActions": [],
+      "realmRoles": ["USER"]
+    },
+    {
+      "username": "curioso",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Carla",
+      "lastName": "Curiosa",
+      "email": "curioso@cowsvsclown.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "curioso123",
+          "temporary": false
+        }
+      ],
+      "requiredActions": [],
+      "realmRoles": []
+    }
+  ]
+}

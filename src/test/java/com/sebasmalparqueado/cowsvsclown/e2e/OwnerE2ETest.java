@@ -13,6 +13,7 @@ import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRe
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.util.List;
@@ -49,6 +50,10 @@ import static org.junit.jupiter.api.Assertions.*;
  *       one builds whatever it needs, precisely because the context is reset.</li>
  * </ul>
  */
+// Replaces the JwtDecoder with a test double, so tokens can be faked without a
+// running Keycloak. Everything after that step — filters, role conversion, the
+// rules — stays real. See E2EAuth for the full reasoning.
+@Import(E2EAuth.class)
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 @AutoConfigureTestRestTemplate
@@ -63,6 +68,23 @@ class OwnerE2ETest {
      */
     @Autowired
     private TestRestTemplate rest;
+
+    /**
+     * Sends every request in this class as ADMIN.
+     *
+     * <p>These tests are about the API's behaviour, not about who may call it:
+     * that is the subject of {@link SecurityE2ETest}. Authenticating once here,
+     * with the role that can do everything, keeps each test showing what it is
+     * really testing instead of the plumbing of the header.</p>
+     *
+     * <p>It has to run before each method and not once for the whole class
+     * because {@code @DirtiesContext} rebuilds the context — and with it the
+     * {@code TestRestTemplate} — between methods.</p>
+     */
+    @BeforeEach
+    void autenticarComoAdmin() {
+        E2EAuth.autenticarComo(rest, E2EAuth.ADMIN);
+    }
 
     private static final String BASE_URL = "/api/owners";
 

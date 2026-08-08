@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd"><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head><meta http-equiv="Content-Type" content="text/html;charset=UTF-8"/><link rel="stylesheet" href="../jacoco-resources/report.css" type="text/css"/><link rel="shortcut icon" href="../jacoco-resources/report.gif" type="image/gif"/><title>RestAuthenticationEntryPoint.java</title><link rel="stylesheet" href="../jacoco-resources/prettify.css" type="text/css"/><script type="text/javascript" src="../jacoco-resources/prettify.js"></script></head><body onload="window['PR_TAB_WIDTH']=4;prettyPrint()"><div class="breadcrumb" id="breadcrumb"><span class="info"><a href="../jacoco-sessions.html" class="el_session">Sessions</a></span><a href="../index.html" class="el_report">cowsvsclown</a> &gt; <a href="index.source.html" class="el_package">com.sebasmalparqueado.cowsvsclown.common.security</a> &gt; <span class="el_source">RestAuthenticationEntryPoint.java</span></div><h1>RestAuthenticationEntryPoint.java</h1><pre class="source lang-java linenums">package com.sebasmalparqueado.cowsvsclown.common.security;
+
+import com.sebasmalparqueado.cowsvsclown.common.exceptions.GlobalExceptionHandler;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.security.web.AuthenticationEntryPoint;
+import org.springframework.web.servlet.HandlerExceptionResolver;
+
+import java.io.IOException;
+
+/**
+ * Qué se le responde a quien pide un recurso protegido &lt;b&gt;sin token&lt;/b&gt; (o con
+ * un token vencido, mal firmado o de otro emisor): &lt;b&gt;401 Unauthorized&lt;/b&gt;.
+ *
+ * &lt;h2&gt;Por qué existe esta clase&lt;/h2&gt;
+ *
+ * &lt;p&gt;Spring Security rechaza estas peticiones en su cadena de filtros, es decir
+ * &lt;b&gt;antes&lt;/b&gt; de que la petición llegue al DispatcherServlet. Por eso el
+ * {@link GlobalExceptionHandler} nunca se entera: sin esta clase, el cliente
+ * recibe la página de error por defecto de Spring, con otra forma de JSON
+ * distinta a la del resto de la API.&lt;/p&gt;
+ *
+ * &lt;p&gt;La solución es no escribir el JSON a mano acá, sino &lt;b&gt;reinyectar&lt;/b&gt; la
+ * excepción en el mismo mecanismo que usa el resto de la aplicación: el
+ * {@code handlerExceptionResolver} de Spring MVC, que es el que termina llamando
+ * a los {@code @ExceptionHandler} del {@link GlobalExceptionHandler}. Así el 401
+ * sale con el mismo {@code ErrorResponse} (status, error, message, path,
+ * timestamp) que un 404 o un 409, y hay un solo lugar donde se define el
+ * formato de los errores.&lt;/p&gt;
+ *
+ * @see RestAccessDeniedHandler el equivalente para el 403
+ */
+public class RestAuthenticationEntryPoint implements AuthenticationEntryPoint {
+
+    private final HandlerExceptionResolver resolver;
+
+<span class="fc" id="L40">    public RestAuthenticationEntryPoint(HandlerExceptionResolver resolver) {</span>
+<span class="fc" id="L41">        this.resolver = resolver;</span>
+<span class="fc" id="L42">    }</span>
+
+    @Override
+    public void commence(HttpServletRequest request,
+                         HttpServletResponse response,
+                         AuthenticationException authException) throws IOException {
+
+        // Cabecera exigida por el RFC 6750 para el esquema Bearer: le dice al
+        // cliente CÓMO debería autenticarse, no solo que falló.
+<span class="fc" id="L51">        response.setHeader(HttpHeaders.WWW_AUTHENTICATE, &quot;Bearer realm=\&quot;cowsvsclown\&quot;&quot;);</span>
+
+        // handler = null: los @ExceptionHandler de un @RestControllerAdvice se
+        // resuelven por tipo de excepción, no por el controlador de destino, así
+        // que no hace falta (ni se puede) saber a qué método iba la petición.
+<span class="pc bpc" id="L56" title="1 of 2 branches missed.">        if (resolver.resolveException(request, response, null, authException) == null) {</span>
+            // Red de seguridad: si por lo que sea no hubiera un handler capaz de
+            // atender la excepción, igual respondemos 401 y no un 200 vacío.
+<span class="nc" id="L59">            response.sendError(HttpStatus.UNAUTHORIZED.value());</span>
+        }
+<span class="fc" id="L61">    }</span>
+}
+</pre><div class="footer"><span class="right">Created with <a href="http://www.jacoco.org/jacoco">JaCoCo</a> 0.8.14.202510111229</span></div></body></html>
