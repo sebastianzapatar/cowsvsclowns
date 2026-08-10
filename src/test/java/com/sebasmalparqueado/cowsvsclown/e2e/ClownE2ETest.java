@@ -17,6 +17,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.List;
 import java.util.UUID;
@@ -50,6 +51,10 @@ import static org.junit.jupiter.api.Assertions.*;
 @AutoConfigureTestRestTemplate
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+// Own database: see OwnerE2ETest. Closing the context drops the schema,
+// so these tests cannot share one with the rest of the suite.
+@TestPropertySource(properties =
+        "spring.datasource.url=jdbc:h2:mem:e2edb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL")
 class ClownE2ETest {
 
     /** Does not throw on 4xx/5xx: it returns the response so it can be asserted. */

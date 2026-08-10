@@ -8,8 +8,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.List;
 import java.util.Optional;
@@ -31,9 +33,22 @@ import static org.junit.jupiter.api.Assertions.*;
  * not Postgres. Native SQL leaning on a Postgres-only feature could pass here
  * and fail in production. For the queries in this project the equivalence
  * holds.</p>
+ *
+ * <p>That compatibility mode is exactly why {@code Replace.NONE} is not
+ * optional here. {@code @DataJpaTest} defaults to replacing the configured
+ * datasource with an anonymous H2 named after a random UUID — and in doing so it
+ * drops the {@code MODE=PostgreSQL} from the URL in
+ * {@code application-test.yml}. The {@code LIMIT} in {@code findByNameSQL} is
+ * PostgreSQL syntax, so without this the one query that most needs the mode was
+ * the one running without it. The {@code @TestPropertySource} also keeps this
+ * family on a database of its own, away from the {@code testdb} the e2e tests
+ * drop when their context is discarded.</p>
  */
 @DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
+@TestPropertySource(properties =
+        "spring.datasource.url=jdbc:h2:mem:repositorydb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL")
 class CowRepositoryIntegrationTest {
 
     @Autowired

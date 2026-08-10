@@ -295,16 +295,16 @@ El texto de Postgres expone nombres de tablas y constraints, y una
 
 ## Tests y cobertura
 
-**196 tests** en 20 archivos, todos en verde.
+**248 tests** en 23 archivos, todos en verde.
 
 | Tipo | Tests | Archivos | Qué prueban |
 |---|---:|---:|---|
 | Unitarias | 108 | 9 | Servicios, mappers y excepciones, sin Spring |
-| Integración | 57 | 7 | Controllers con MockMvc y repositorios con H2 |
+| Integración | 109 | 10 | Servicios contra el repositorio real, controllers con MockMvc y repositorios con H2 |
 | End to end | 30 | 3 | La app completa por HTTP real |
 | Contexto | 1 | 1 | Que todos los beans se puedan construir |
 
-Cobertura: **98.7% de líneas**, 95.8% de instrucciones, 87.5% de ramas, 100% de
+Cobertura: **99.7% de líneas**, 98.0% de instrucciones, 91.2% de ramas, 100% de
 clases.
 
 ### Correr los tests
@@ -317,7 +317,7 @@ O solo una familia, que es lo útil mientras trabajas:
 
 ```bash
 ./gradlew pruebasUnitarias     # 108 tests, menos de 1s
-./gradlew pruebasIntegracion   # 57 tests, ~1s
+./gradlew pruebasIntegracion   # 109 tests, ~7s (los de servicio levantan el contexto)
 ./gradlew pruebasE2E           # 30 tests, ~2s (levantan la app entera)
 ```
 
@@ -412,6 +412,7 @@ porcentaje estaría mintiendo.
 | Unitario de mapper | Sin Spring | Entidad ↔ DTO |
 | Integración de controller | `@WebMvcTest`, servicio mockeado | Rutas, status y JSON de la capa web |
 | Integración de repositorio | `@DataJpaTest` + H2 | Las queries JPQL y nativas |
+| Integración de servicio | `@SpringBootTest` + MockMvc + H2, **sin mocks** | El servicio contra el repositorio real, y encima el controller real |
 | End to end | `@SpringBootTest(RANDOM_PORT)` + H2 | Un flujo real por HTTP, de punta a punta |
 
 Por qué los de controller cuentan como integración aunque el servicio esté
@@ -419,12 +420,26 @@ mockeado: la petición atraviesa el stack real de Spring MVC (ruteo, binding del
 JSON, `@Valid`, `GlobalExceptionHandler`, serialización de la respuesta). Eso es
 justo la parte que un test unitario de la clase controller se saltaría.
 
+Y por qué existen además los de servicio (`*ServiceIntegrationTest`): los otros
+tres cortan la aplicación en un punto distinto y ninguno ve el todo. El unitario
+de servicio no sabe si la query existe ni si la fila se escribió; el de
+controller tiene el servicio mockeado; el de repositorio no sabe si el servicio
+llama a esas queries. Estos arman el trío completo —controller, servicio,
+repositorio y H2, sin un solo mock— y por eso pueden afirmar contra la **base de
+datos**: después de cada operación releen las filas para ver qué quedó
+guardado. Es la única forma de comprobar cosas como que la fila en `clown_cow`
+existe de verdad, que el `owner_id` quedó puesto, o que una transacción que
+falla a la mitad deshace lo que ya había insertado.
+
 ### Desglose por archivo
 
 | Archivo | Tipo | Tests |
 |---|---|---:|
 | `GlobalExceptionHandlerTest` | Unitario | 22 |
+| `ClownServiceIntegrationTest` | Integración | 19 |
+| `CowServiceIntegrationTest` | Integración | 18 |
 | `CowServiceTest` | Unitario | 16 |
+| `OwnerServiceIntegrationTest` | Integración | 15 |
 | `GlobalExceptionHandlerIntegrationTest` | Integración | 14 |
 | `OwnerServiceTest` | Unitario | 14 |
 | `ClownServiceTest` | Unitario | 13 |
@@ -449,8 +464,8 @@ tablas limpias y no dependen de que haya un Postgres levantado.
 
 ### Un detalle que vale la pena saber
 
-Los tests de repositorio y los e2e limpian el estado de formas distintas, y no es
-un descuido:
+Los tests que tocan la base de datos limpian el estado de tres formas distintas,
+y ninguna es un descuido:
 
 * Los `@DataJpaTest` corren cada método dentro de una transacción que se
   **revierte** al terminar. Por eso no se pisan entre sí.
@@ -459,10 +474,49 @@ un descuido:
   `@DirtiesContext(AFTER_EACH_TEST_METHOD)` para reconstruir el contexto entre
   métodos. Sin eso, cada test heredaría las filas del anterior y las validaciones
   de duplicados empezarían a fallar según el orden de ejecución.
+* Los `*ServiceIntegrationTest` también confirman, pero **borran a mano** en un
+  `@BeforeEach` (payasos, luego vacas, luego dueños: ese es el orden que
+  respetan las llaves foráneas). A propósito no llevan `@Transactional`: una
+  transacción de test envolvería también al servicio, y entonces un rollback que
+  no ocurre o una colección LAZY leída fuera de su sesión pasarían
+  desapercibidos, que es justo lo que estos tests existen para detectar.
 
 Es también la razón de que los e2e sean los lentos: reconstruir el contexto
 cuesta. Por eso hay 30 y no 200 — cubren el camino feliz y los errores que vale
 la pena ver de punta a punta, y los casos exhaustivos viven en las unitarias.
+
+### Cada familia tiene su propia base H2
+
+H2 identifica una base en memoria **por su URL**, así que todo el que la nombre
+la comparte. Y cuando el contexto de un e2e se descarta por el `@DirtiesContext`,
+el `ddl-auto: create-drop` **borra el esquema** al cerrarse. Cualquier otro
+contexto cacheado que apuntara a esa misma base se queda mirando unas tablas que
+ya no existen, y falla con `Table "CLOWNS" not found` o no, según el orden en que
+Gradle ejecute las clases. Por eso cada familia declara la suya:
+
+| Familia | Base | Anotación |
+|---|---|---|
+| `*ServiceIntegrationTest` | `integrationdb` | `@TestPropertySource` |
+| `*RepositoryIntegrationTest` | `repositorydb` | `@TestPropertySource` + `@AutoConfigureTestDatabase(replace = NONE)` |
+| `*E2ETest` | `e2edb` | `@TestPropertySource` |
+| `CowsvsclownApplicationTests` | `testdb` | la del `application-test.yml` |
+
+Dentro de cada familia las clases declaran la **misma** URL a propósito: misma
+configuración significa que Spring reutiliza un solo contexto para todas en vez
+de levantarlo una vez por clase.
+
+El `replace = NONE` de los de repositorio merece explicación aparte. Desde Spring
+Boot 3.4, `@DataJpaTest` trae `@AutoConfigureTestDatabase(replace = NON_TEST)`
+por defecto: **cambia el datasource configurado** por una H2 anónima con nombre
+UUID. Aislaba sin que nadie lo pidiera, sí, pero de paso se llevaba por delante
+el `MODE=PostgreSQL` de la URL del `application-test.yml`… justo en la familia
+que prueba `findByNameSQL`, la única query nativa del proyecto, escrita con
+`LIMIT` de PostgreSQL. Con `NONE` se respeta el datasource configurado y esa
+query se valida por fin en el modo que dice el archivo.
+
+Para comprobar que ya nada depende del orden, la suite se corrió con
+`junit.jupiter.testclass.order.default=ClassOrderer$Random`: tres corridas, las
+248 en verde.
 
 ---
 

@@ -8,8 +8,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.List;
 import java.util.Optional;
@@ -30,9 +32,24 @@ import static org.junit.jupiter.api.Assertions.*;
  * {@code @JoinTable}) and {@code Cow} mirrors it with {@code mappedBy}. That
  * matters for the fixture: the link has to be created from the clown, because
  * Hibernate only writes the join rows for the owning side.</p>
+ *
+ * <p><b>About the two extra annotations.</b> Since Spring Boot 3.4 the default
+ * of {@code @AutoConfigureTestDatabase} is {@code Replace.NON_TEST}, and
+ * {@code @DataJpaTest} applies it: the datasource configured in
+ * {@code application-test.yml} was being swapped for an anonymous H2 named after
+ * a random UUID. It worked, but it silently threw away the
+ * {@code MODE=PostgreSQL} of that URL — and this project has a native SQL query
+ * written in PostgreSQL syntax. With {@code Replace.NONE} the configured
+ * datasource is respected, and the {@code @TestPropertySource} points this
+ * family at a database of its own so it does not share {@code testdb} with the
+ * e2e tests, whose {@code @DirtiesContext} drops the schema on the way out. Same
+ * reasoning as in the {@code *ServiceIntegrationTest} classes.</p>
  */
 @DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
+@TestPropertySource(properties =
+        "spring.datasource.url=jdbc:h2:mem:repositorydb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL")
 class ClownRepositoryIntegrationTest {
 
     @Autowired

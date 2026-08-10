@@ -14,6 +14,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.List;
 
@@ -47,6 +48,13 @@ import static org.junit.jupiter.api.Assertions.*;
  *   <li>{@code @Order} keeps the sequence readable (create, then read, then
  *       update, then delete) rather than being a dependency between tests: each
  *       one builds whatever it needs, precisely because the context is reset.</li>
+ *   <li>{@code @TestPropertySource} puts the three e2e classes on a database of
+ *       their own. Discarding the context is not free of side effects: with
+ *       {@code ddl-auto: create-drop}, closing it <b>drops the schema</b>, and
+ *       H2 identifies an in-memory database by its URL, so anyone else naming
+ *       the same one would find their tables gone. Since these are the only
+ *       tests that throw contexts away, they are the ones that have to be kept
+ *       apart.</li>
  * </ul>
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -54,6 +62,8 @@ import static org.junit.jupiter.api.Assertions.*;
 @AutoConfigureTestRestTemplate
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
+@TestPropertySource(properties =
+        "spring.datasource.url=jdbc:h2:mem:e2edb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL")
 class OwnerE2ETest {
 
     /**

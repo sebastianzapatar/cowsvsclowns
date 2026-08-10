@@ -4,6 +4,12 @@
 # Uses in-memory H2: each test starts with clean tables and doesn't depend on
 # an external Postgres. create-drop creates the tables on startup and drops
 # them when the session closes.
+#
+# The url below is only used by CowsvsclownApplicationTests. Every other family
+# overrides it with a @TestPropertySource pointing at a database of its own
+# (integrationdb, repositorydb, e2edb), because H2 identifies an in-memory
+# database by its URL and the e2e tests drop the schema when their context is
+# discarded. See "Cada familia tiene su propia base H2" in the README.
 # =============================================================================
 
 spring:

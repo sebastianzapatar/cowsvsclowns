@@ -7,8 +7,10 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
 import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 
 import java.util.List;
 import java.util.Optional;
@@ -33,9 +35,20 @@ import static org.junit.jupiter.api.Assertions.*;
  * <p>Each test method runs inside a transaction that is rolled back at the end,
  * so the tests cannot leak state into each other and their order does not
  * matter.</p>
+ *
+ * <p>{@code Replace.NONE} keeps the datasource from {@code application-test.yml}
+ * instead of the anonymous H2 that {@code @DataJpaTest} would swap in by
+ * default, which quietly loses the {@code MODE=PostgreSQL} of that URL, and the
+ * {@code @TestPropertySource} gives this family its own database, away from the
+ * {@code testdb} that the e2e tests drop when their context is discarded. The
+ * long version is in {@code CowRepositoryIntegrationTest}, where the mode
+ * actually changes what is being tested.</p>
  */
 @DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
+@TestPropertySource(properties =
+        "spring.datasource.url=jdbc:h2:mem:repositorydb;DB_CLOSE_DELAY=-1;MODE=PostgreSQL")
 class OwnerRepositoryIntegrationTest {
 
     @Autowired
