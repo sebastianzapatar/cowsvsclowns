@@ -51,13 +51,15 @@ class ClownControllerIntegrationTest {
         @DisplayName("returns 200 OK and list of clowns")
         void returnsOkAndList() throws Exception {
             ClownResponse response = new ClownResponse(
-                    UUID.randomUUID(), "Pennywise", "Terror", true, 0, List.of());
+                    UUID.randomUUID(), "Pennywise", "Terror",
+                    true, 0, List.of());
             when(clownService.getAll()).thenReturn(List.of(response));
 
             mockMvc.perform(get("/api/clowns")
                             .contentType(MediaType.APPLICATION_JSON))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[0].name").value("Pennywise"));
+                    .andExpect(jsonPath("$[0].name").
+                            value("Pennywise"));
 
             verify(clownService).getAll();
         }
@@ -78,14 +80,17 @@ class ClownControllerIntegrationTest {
             mockMvc.perform(get("/api/clowns/{id}", id)
                             .contentType(MediaType.APPLICATION_JSON))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.name").value("Pennywise"));
+                    .andExpect(jsonPath("$.name").
+                            value("Pennywise"));
         }
 
         @Test
         @DisplayName("returns 404 Not Found if missing")
         void returnsNotFoundIfMissing() throws Exception {
             UUID id = UUID.randomUUID();
-            when(clownService.getById(id)).thenThrow(ResourceNotFoundException.of("Clown", id));
+            when(clownService.getById(id)).
+                    thenThrow(ResourceNotFoundException.of
+                            ("Clown", id));
 
             mockMvc.perform(get("/api/clowns/{id}", id)
                             .contentType(MediaType.APPLICATION_JSON))

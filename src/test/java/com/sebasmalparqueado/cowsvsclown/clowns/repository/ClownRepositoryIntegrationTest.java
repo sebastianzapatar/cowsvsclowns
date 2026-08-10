@@ -68,7 +68,8 @@ class ClownRepositoryIntegrationTest {
     @Test
     @DisplayName("findActiveWithCowsById finds active clown with their cows")
     void findActiveWithCowsById_found() {
-        Optional<Clown> result = clownRepository.findActiveWithCowsById(activeClown.getId());
+        Optional<Clown> result = clownRepository.
+                findActiveWithCowsById(activeClown.getId());
 
         assertTrue(result.isPresent());
         assertEquals(1, result.get().getCows().size());
