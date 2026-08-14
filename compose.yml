@@ -54,7 +54,7 @@
 # Nombre fijo del proyecto. Sin esto Compose usa el nombre de la carpeta, y si
 # alguna vez la renombrás te quedan contenedores y volúmenes huérfanos con el
 # nombre anterior.
-name: cowsvsclown
+name: cowsvsclowns
 
 services:
   app:
@@ -82,7 +82,8 @@ services:
         # No arranca la app hasta que el healthcheck de Postgres pase. Sin esto,
         # la app arrancaría contra una base que todavía no acepta conexiones.
         condition: service_healthy
-
+      keycloak:
+        condition: service_healthy
     environment:
       # Activa el perfil "docker" -> carga application.yml + application-docker.yml
       - SPRING_PROFILES_ACTIVE=docker
@@ -100,6 +101,65 @@ services:
       # reflejado en la base.
       - DDL_AUTO=update
 
+      # Keycloak tiene DOS direcciones y hay que darle las dos, porque la app
+      # las usa para cosas distintas:
+      #
+      #   keycloak:8080  -> la interna de la red de Docker. Por ahí baja la app
+      #                     las llaves públicas con las que verifica la firma.
+      - KEYCLOAK_JWKS_URI=http://keycloak:8080/realms/cowsvsclowns/protocol/openid-connect/certs
+      #   localhost:8180 -> la que ve el navegador. Es la que Keycloak escribe
+      #                     dentro del token como emisor ("iss"), así que es
+      #                     contra esta que la app tiene que comparar.
+      - KEYCLOAK_ISSUER_URI=http://localhost:${KEYCLOAK_PORT:-8180}/realms/cowsvsclowns
+      # La misma pública, para que Swagger sepa a dónde mandar a loguearse.
+      - KEYCLOAK_PUBLIC_URL=http://localhost:${KEYCLOAK_PORT:-8180}
+
+  # El que emite los tokens. Arranca en modo dev (sin HTTPS ni base de datos
+  # propia: todo queda en memoria) porque esto es un proyecto de clase. En
+  # producción Keycloak necesita su Postgres y certificados de verdad.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.4
+    container_name: cowsvsclown-keycloak
+    restart: unless-stopped
+    command: ["start-dev","--import-realm"]
+    environment:
+      # Usuario de la consola de administración (http://localhost:8180/admin),
+      # no de la API. Los usuarios de la API vienen en el realm importado.
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=admin
+
+      # Dirección pública: es la que Keycloak pone como emisor en los tokens y
+      # en los enlaces del login. Si no coincide con KEYCLOAK_ISSUER_URI de
+      # arriba, la app rechaza todos los tokens con un 401.
+      - KC_HOSTNAME=http://localhost:${KEYCLOAK_PORT:-8180}
+      - KC_HOSTNAME_STRICT=false
+      - KC_HTTP_ENABLED=true
+      - KC_HEALTH_ENABLED=true
+    ports:
+      - "${KEYCLOAK_PORT:-8180}:8080"
+    volumes:
+        # De acá lee el realm al arrancar (usuarios, roles y cliente de Swagger).
+        # :ro = solo lectura, el contenedor no tiene por qué poder modificar un
+        # archivo del repo.
+        #
+        # Ese JSON trae "sslRequired": "none", y no es un descuido: Keycloak
+        # exige HTTPS a todo lo que no venga de 127.0.0.1, y a través de Docker
+        # las peticiones llegan con la IP de la red interna. Sin esa línea, el
+        # login y el endpoint de token responden "HTTPS required". Vale para
+        # desarrollo; en producción se pone un certificado de verdad.
+        #
+        # Ojo también: el JSON no admite comentarios ni campos inventados. Si le
+        # agregás una clave que Keycloak no conoce, la importación falla entera
+        # y el contenedor queda "unhealthy".
+      - ./keycloak:/opt/keycloak/data/import:ro
+    healthcheck:
+        # La imagen de Keycloak no trae curl ni wget, así que se usa el truco de
+        # abrir un socket con el /dev/tcp de bash contra su endpoint de salud.
+      test: [ "CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '\"status\": \"UP\"'" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
   db:
     image: postgres:15-alpine
     container_name: cowsvsclown-db

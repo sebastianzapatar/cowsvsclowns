@@ -20,6 +20,35 @@ spring:
     # que "validationErrors" solo aparezca en los errores de validación.
     default-property-inclusion: non_null
 
+  # ================================ Seguridad ================================
+  # La app valida tokens, no los emite. Estas dos URL son lo único que necesita
+  # para hacerlo, y son distintas a propósito:
+  #
+  #   jwk-set-uri: de dónde baja las llaves públicas para verificar la firma.
+  #                Dentro de Docker es la dirección interna (keycloak:8080), a
+  #                la que el navegador no llega pero el contenedor sí.
+  #   issuer-uri:  contra qué "iss" compara el token. Ese campo lo escribió
+  #                Keycloak con la dirección que usó el navegador al loguearse
+  #                (localhost:8180), así que tiene que ser esa y no la interna;
+  #                si no, todo token válido se rechaza.
+  #
+  # Los valores por defecto son para correr la app fuera de Docker (perfil dev)
+  # contra el Keycloak del compose: docker compose up -d keycloak
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          jwk-set-uri: ${KEYCLOAK_JWKS_URI:http://localhost:8180/realms/cowsvsclowns/protocol/openid-connect/certs}
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:http://localhost:8180/realms/cowsvsclowns}
+
+# =============================== Keycloak ====================================
+# Dirección pública de Keycloak (la que ve el navegador). No la usa la seguridad
+# de la app, sino OpenApiConfig, para saber a dónde mandar al usuario cuando
+# aprieta "Authorize" en Swagger.
+keycloak:
+  public-url: ${KEYCLOAK_PUBLIC_URL:http://localhost:8180}
+  realm: cowsvsclowns
+
 # ================================= Servidor ==================================
 # En local y en Docker no hay variable PORT, así que se usa el 8080 de siempre.
 # Render (y casi cualquier PaaS) asigna un puerto propio en la variable PORT y
@@ -47,6 +76,12 @@ springdoc:
     # Deja los grupos plegados al abrir la página: con 3 recursos y ~18
     # endpoints, desplegado no se ve nada.
     doc-expansion: none
+    # Botón "Authorize": manda al login de Keycloak y guarda el token para las
+    # llamadas siguientes. El cliente es público (no lleva secreto), así que usa
+    # PKCE, que es lo que evita que alguien intercepte el código de autorización.
+    oauth:
+      client-id: danielnovuelva-swagger
+      use-pkce-with-authorization-code-grant: true
 
 # ================================= Actuator ==================================
 # Solo se expone /actuator/health. El resto de endpoints (env, beans, mappings)

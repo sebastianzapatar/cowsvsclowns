@@ -1,9 +1,15 @@
 package com.sebasmalparqueado.cowsvsclown.common.config;
 
+import io.swagger.v3.oas.models.Components;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Contact;
 import io.swagger.v3.oas.models.info.Info;
 import io.swagger.v3.oas.models.info.License;
+import io.swagger.v3.oas.models.security.OAuthFlow;
+import io.swagger.v3.oas.models.security.OAuthFlows;
+import io.swagger.v3.oas.models.security.Scopes;
+import io.swagger.v3.oas.models.security.SecurityRequirement;
+import io.swagger.v3.oas.models.security.SecurityScheme;
 import io.swagger.v3.oas.models.servers.Server;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -27,12 +33,24 @@ import java.util.List;
 @Configuration
 public class OpenApiConfig {
 
+    /** Nombre interno del esquema de seguridad; aparece en el botón Authorize. */
+    private static final String ESQUEMA_KEYCLOAK = "keycloak";
+
     /** Puerto real de la app, para que el servidor de ejemplo no quede fijo en 8080. */
     @Value("${server.port:8080}")
     private String serverPort;
 
+    /** Dirección de Keycloak tal como la ve el navegador (no la interna de Docker). */
+    @Value("${keycloak.public-url}")
+    private String keycloakUrl;
+
+    @Value("${keycloak.realm}")
+    private String keycloakRealm;
+
     @Bean
     public OpenAPI cowsVsClownsOpenAPI() {
+        String openidConnect = keycloakUrl + "/realms/" + keycloakRealm + "/protocol/openid-connect";
+
         return new OpenAPI()
                 .info(new Info()
                         .title("Cows vs Clowns API")
@@ -57,6 +75,23 @@ public class OpenApiConfig {
                 .servers(List.of(
                         new Server()
                                 .url("http://localhost:" + serverPort)
-                                .description("Entorno local")));
+                                .description("Entorno local")))
+                // Con esto Swagger muestra el botón "Authorize": abre el login de
+                // Keycloak, vuelve con el token y lo manda en todas las llamadas.
+                // Sin esto la documentación sigue viéndose, pero cada "Try it out"
+                // responde 401 porque va sin cabecera Authorization.
+                .components(new Components()
+                        .addSecuritySchemes(ESQUEMA_KEYCLOAK, new SecurityScheme()
+                                .type(SecurityScheme.Type.OAUTH2)
+                                .description("""
+                                        Usuarios de prueba del realm: admin/admin123 (todo)
+                                        y user/user123 (solo GET).""")
+                                .flows(new OAuthFlows().authorizationCode(new OAuthFlow()
+                                        .authorizationUrl(openidConnect + "/auth")
+                                        .tokenUrl(openidConnect + "/token")
+                                        .scopes(new Scopes())))))
+                // Aplica el esquema a todos los endpoints. Los públicos (la propia
+                // documentación) no están en el contrato, así que no molesta.
+                .addSecurityItem(new SecurityRequirement().addList(ESQUEMA_KEYCLOAK));
     }
 }

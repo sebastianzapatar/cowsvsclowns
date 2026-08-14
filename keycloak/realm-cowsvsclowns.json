@@ -1,0 +1,91 @@
+{
+  "realm": "cowsvsclowns",
+  "enabled": true,
+  "sslRequired": "none",
+
+  "accessTokenLifespan": 1800,
+  "ssoSessionIdleTimeout": 3600,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Puede leer y ademas crear, editar y borrar"
+      },
+      {
+        "name": "user",
+        "description": "Solo puede leer (los GET)"
+      }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "danielnovuelva-swagger",
+      "name": "danielnovuelva (Swagger y pagina de ayuda)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8080/*",
+        "http://localhost:8081/*"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://localhost:8081"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "profile",
+        "roles",
+        "email"
+      ]
+    }
+  ],
+
+  "users": [
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "majonolehacecaso",
+      "email": "admin@natybella.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "admin",
+        "user"
+      ]
+    },
+    {
+      "username": "user",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Usuario",
+      "lastName": "isaaccancele",
+      "email": "user@natybella.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "user123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "user"
+      ]
+    }
+  ]
+}
